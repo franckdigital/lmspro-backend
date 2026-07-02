@@ -217,9 +217,18 @@ def complete_enrollment(enrollment):
     for employee_skill, levels_gained in update_employee_skills_from_course(user, course):
         award_skill_gain_xp(user, employee_skill, levels_gained)
 
-    from apps.certificates.services import maybe_issue_certificate_for_course
+    # Best-effort: PDF/QR generation is a side effect and must never fail lesson-progress
+    # tracking (the request that triggers this on 100% completion).
+    try:
+        from apps.certificates.services import maybe_issue_certificate_for_course
 
-    maybe_issue_certificate_for_course(user, course)
+        maybe_issue_certificate_for_course(user, course)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            'Certificate issuance failed on course completion (enrollment=%s)', enrollment.id
+        )
 
     from apps.learning_paths.services import recompute_path_enrollments_for_course
 

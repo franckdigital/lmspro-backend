@@ -161,8 +161,16 @@ def grade_attempt(attempt, timed_out=False):
     if attempt.assessment.chapter_id is None and attempt.score is not None and attempt.score >= 100:
         # Passing the course's final exam with a perfect score is what unlocks the certificate
         # for courses that have one — see apps.certificates.services.maybe_issue_certificate_for_course.
-        from apps.certificates.services import maybe_issue_certificate_for_course
+        # Best-effort: PDF/QR generation is a side effect and must never fail the exam submission.
+        try:
+            from apps.certificates.services import maybe_issue_certificate_for_course
 
-        maybe_issue_certificate_for_course(attempt.user, attempt.assessment.course)
+            maybe_issue_certificate_for_course(attempt.user, attempt.assessment.course)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                'Certificate issuance failed after a perfect final-exam score (attempt=%s)', attempt.id
+            )
 
     return attempt
