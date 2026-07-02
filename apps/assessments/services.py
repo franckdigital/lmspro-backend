@@ -9,6 +9,18 @@ from apps.assessments.models import Assessment, AssessmentAttempt, AssessmentQue
 def start_attempt(assessment, user):
     from apps.progression.services import get_progression_settings
 
+    if assessment.chapter_id is None:
+        # Course-level final exam: only accessible once the learner has finished 100% of the lessons.
+        from apps.courses.models import Enrollment
+
+        progress = (
+            Enrollment.objects.filter(user=user, course=assessment.course)
+            .values_list('progress_percent', flat=True)
+            .first()
+        )
+        if progress is None or progress < 100:
+            raise ValueError("Vous devez terminer 100% de la formation avant de passer cette évaluation.")
+
     previous = AssessmentAttempt.objects.filter(assessment=assessment, user=user).count()
     course_settings = get_progression_settings(assessment.course)
     effective_max = assessment.max_attempts
@@ -100,13 +112,22 @@ def grade_answer(question, answer):
 
 
 def grade_attempt(attempt, timed_out=False):
-    total_points = 0
+    # total_points must reflect every question in the attempt's snapshot, not just the ones
+    # the learner actually answered — otherwise skipping questions doesn't cost any points.
+    snapshot_questions = Question.objects.filter(id__in=attempt.questions_snapshot)
+    total_points = sum(q.points for q in snapshot_questions)
     earned_points = 0
     needs_manual_grading = False
 
-    for answer in attempt.answers.select_related('question').prefetch_related('selected_choices'):
-        total_points += answer.question.points
-        is_correct, points = grade_answer(answer.question, answer)
+    answered_by_question = {
+        answer.question_id: answer
+        for answer in attempt.answers.select_related('question').prefetch_related('selected_choices')
+    }
+    for question in snapshot_questions:
+        answer = answered_by_question.get(question.id)
+        if answer is None:
+            continue  # left blank — contributes 0 earned points but still counts in total_points
+        is_correct, points = grade_answer(question, answer)
         answer.is_correct = is_correct
         answer.points_awarded = points
         answer.save(update_fields=['is_correct', 'points_awarded'])
@@ -136,5 +157,12 @@ def grade_attempt(attempt, timed_out=False):
             attempt.user, 'passed' if attempt.is_passed else 'failed', 'assessment', attempt.assessment_id,
             object_name=attempt.assessment.title, result={'success': attempt.is_passed, 'score': {'scaled': round(score / 100, 2)}},
         )
+
+    if attempt.assessment.chapter_id is None and attempt.score is not None and attempt.score >= 100:
+        # Passing the course's final exam with a perfect score is what unlocks the certificate
+        # for courses that have one — see apps.certificates.services.maybe_issue_certificate_for_course.
+        from apps.certificates.services import maybe_issue_certificate_for_course
+
+        maybe_issue_certificate_for_course(attempt.user, attempt.assessment.course)
 
     return attempt

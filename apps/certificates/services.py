@@ -75,6 +75,39 @@ def generate_certificate(user, course=None, path=None, template=None):
     return certificate
 
 
+def maybe_issue_certificate_for_course(user, course):
+    """Issue the course certificate once the learner has both finished 100% of the lessons AND,
+    if the course has a course-level final exam (an Assessment with chapter=None), scored 100%
+    on it. Safe to call from multiple trigger points (lesson completion, exam grading) — no-ops
+    if a certificate already exists or the conditions aren't met yet."""
+
+    if not course.certificate_enabled:
+        return None
+    if Certificate.objects.filter(user=user, course=course).exists():
+        return None
+
+    from apps.courses.models import Enrollment
+
+    try:
+        enrollment = Enrollment.objects.get(user=user, course=course)
+    except Enrollment.DoesNotExist:
+        return None
+    if enrollment.progress_percent < 100:
+        return None
+
+    from apps.assessments.models import Assessment, AssessmentAttempt
+
+    final_exam = Assessment.objects.filter(course=course, chapter__isnull=True, is_published=True).first()
+    if final_exam is not None:
+        has_perfect_attempt = AssessmentAttempt.objects.filter(
+            assessment=final_exam, user=user, score__gte=100
+        ).exists()
+        if not has_perfect_attempt:
+            return None
+
+    return generate_certificate(user, course=course)
+
+
 def _verification_url(certificate):
     return f'{settings.FRONTEND_BASE_URL}/verify-certificate/{certificate.verification_code}'
 

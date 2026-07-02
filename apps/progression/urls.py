@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from apps.progression.views import (
     ChapterValidationViewSet,
     CourseProgressionSettingsViewSet,
+    CourseProgressResetView,
     CourseProgressView,
     LessonAccessView,
     LessonProgressViewSet,
@@ -18,5 +19,6 @@ router.register('xapi-statements', XAPIStatementViewSet, basename='xapi-statemen
 
 urlpatterns = [
     path('courses/<int:course_id>/progress/', CourseProgressView.as_view(), name='course-progress'),
+    path('courses/<int:course_id>/progress/reset/', CourseProgressResetView.as_view(), name='course-progress-reset'),
     path('lessons/<int:lesson_id>/access/', LessonAccessView.as_view(), name='lesson-access'),
 ] + router.urls

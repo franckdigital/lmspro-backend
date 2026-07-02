@@ -217,10 +217,9 @@ def complete_enrollment(enrollment):
     for employee_skill, levels_gained in update_employee_skills_from_course(user, course):
         award_skill_gain_xp(user, employee_skill, levels_gained)
 
-    if course.certificate_enabled:
-        from apps.certificates.services import generate_certificate
+    from apps.certificates.services import maybe_issue_certificate_for_course
 
-        generate_certificate(user, course=course)
+    maybe_issue_certificate_for_course(user, course)
 
     from apps.learning_paths.services import recompute_path_enrollments_for_course
 
