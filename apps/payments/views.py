@@ -66,9 +66,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='mock-paid')
     def mock_paid(self, request, pk=None):
-        """DEBUG-only — simulates a successful CinetPay payment for local testing."""
+        """Simulates a successful CinetPay payment — only active when CINETPAY_MOCK=True."""
         from django.conf import settings
-        if not settings.DEBUG:
+        if not getattr(settings, 'CINETPAY_MOCK', False):
             return Response(status=404)
         order = self.get_object()
         if order.user != request.user:

@@ -91,8 +91,8 @@ class CinetPayProvider(BasePaymentProvider):
 
         transaction_id = f'LMS-{uuid.uuid4().hex[:10].upper()}'
 
-        # In DEBUG mode, skip the real API call if CinetPay is unreachable
-        if settings.DEBUG and getattr(settings, 'CINETPAY_MOCK', False):
+        # Skip the real API call when CINETPAY_MOCK is enabled (dev or staging)
+        if getattr(settings, 'CINETPAY_MOCK', False):
             mock_url = f'{settings.FRONTEND_BASE_URL}/checkout/cinetpay-mock?tid={transaction_id}&order={order.id}'
             logger.warning('CinetPay MOCK — returning fake payment URL: %s', mock_url)
             return PaymentInitResult(
