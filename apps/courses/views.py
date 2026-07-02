@@ -78,8 +78,8 @@ class CourseViewSet(AuditLogMixin, viewsets.ModelViewSet):
                 own |= Q(company_id=user.company_id)
             qs = qs.filter(Q(status=Course.STATUS_PUBLISHED) | own)
             if user.company_id:
-                # Company/TC users see only their company's courses, not the B2C catalog
-                visible_company = Q(company_id=user.company_id)
+                # Company employees see their company's courses + the public B2C catalog
+                visible_company = Q(company_id=user.company_id) | Q(company__isnull=True, is_company_internal=False)
             else:
                 visible_company = Q(company__isnull=True, is_company_internal=False)
         else:
