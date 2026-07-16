@@ -9,7 +9,8 @@ from apps.core.constants import Roles
 
 def course_kpis(course):
     from apps.assessments.models import AssessmentAttempt
-    from apps.courses.models import Enrollment
+    from apps.courses.models import Enrollment, Lesson
+    from apps.progression.models import CourseView, LessonProgress
 
     enrollments = Enrollment.objects.filter(course=course)
     total = enrollments.count()
@@ -17,40 +18,72 @@ def course_kpis(course):
     dropped = enrollments.filter(status=Enrollment.STATUS_DROPPED).count()
     avg_score = AssessmentAttempt.objects.filter(assessment__course=course, score__isnull=False).aggregate(avg=Avg('score'))['avg'] or 0
 
+    lesson_ids = list(Lesson.objects.filter(chapter__section__course=course).values_list('id', flat=True))
+    lp_qs = LessonProgress.objects.filter(lesson_id__in=lesson_ids)
+    lp_agg = lp_qs.aggregate(
+        total_lesson_opens=Sum('open_count'),
+        total_video_plays=Sum('video_play_count'),
+        total_time_s=Sum('time_spent_seconds'),
+        avg_time_s=Avg('time_spent_seconds'),
+        avg_watch=Avg('watch_percent'),
+    )
+    view_agg = CourseView.objects.filter(course=course).aggregate(
+        total_course_opens=Sum('open_count'),
+        unique_visitors=Count('id'),
+    )
+
     return {
         'total_enrolled': total,
         'completion_rate': round(completed / total * 100, 2) if total else 0,
         'dropout_rate': round(dropped / total * 100, 2) if total else 0,
         'average_score': round(avg_score, 2),
         'total_certifications': course.certificates.count(),
+        # Tracking
+        'total_course_page_opens': view_agg['total_course_opens'] or 0,
+        'unique_visitors': view_agg['unique_visitors'] or 0,
+        'total_lesson_opens': lp_agg['total_lesson_opens'] or 0,
+        'total_video_plays': lp_agg['total_video_plays'] or 0,
+        'total_time_spent_hours': round((lp_agg['total_time_s'] or 0) / 3600, 2),
+        'avg_time_per_learner_minutes': round((lp_agg['avg_time_s'] or 0) / 60, 2),
+        'avg_watch_percent': round(float(lp_agg['avg_watch'] or 0), 2),
     }
 
 
 def employee_kpis(user):
+    from apps.assessments.models import AssessmentAttempt
     from apps.certificates.models import Certificate
     from apps.courses.models import Enrollment
-    from apps.assessments.models import AssessmentAttempt
     from apps.hr_analytics.models import EmployeeSkill, PDIObjective
+    from apps.progression.models import CourseView, LessonProgress
     from apps.virtual_classes.models import VirtualClassAttendance
 
     enrollments = Enrollment.objects.filter(user=user)
     total_courses = enrollments.count()
+    completed_courses = enrollments.filter(status=Enrollment.STATUS_COMPLETED).count()
     avg_progress = enrollments.aggregate(avg=Avg('progress_percent'))['avg'] or 0
     avg_score = AssessmentAttempt.objects.filter(user=user, score__isnull=False).aggregate(avg=Avg('score'))['avg'] or 0
 
     skills = EmployeeSkill.objects.filter(user=user)
     avg_skill_level = skills.aggregate(avg=Avg('level'))['avg'] or 0
 
-    from apps.progression.models import LessonProgress
-
+    lp_agg = LessonProgress.objects.filter(user=user).aggregate(
+        total_time_s=Sum('time_spent_seconds'),
+        total_lesson_opens=Sum('open_count'),
+        total_video_plays=Sum('video_play_count'),
+        avg_watch_percent=Avg('watch_percent'),
+        watched_s=Sum('watched_seconds'),
+    )
     virtual_seconds = VirtualClassAttendance.objects.filter(user=user).aggregate(
         total=Sum('duration_seconds')
     )['total'] or 0
-    lesson_seconds = LessonProgress.objects.filter(user=user).aggregate(
-        total=Sum('watched_seconds')
-    )['total'] or 0
-    total_time_seconds = virtual_seconds + lesson_seconds
+
+    total_time_seconds = (lp_agg['total_time_s'] or 0) + virtual_seconds
     time_spent_hours = round(total_time_seconds / 3600, 2)
+    time_spent_minutes = round(total_time_seconds / 60, 2)
+
+    total_course_opens = CourseView.objects.filter(user=user).aggregate(
+        total=Sum('open_count')
+    )['total'] or 0
 
     objectives = PDIObjective.objects.filter(plan__user=user)
     total_objectives = objectives.count()
@@ -62,11 +95,19 @@ def employee_kpis(user):
 
     return {
         'total_courses_enrolled': total_courses,
+        'completed_courses': completed_courses,
         'progress_percent': round(avg_progress, 2),
         'average_score': round(avg_score, 2),
         'skills_percent': round(avg_skill_level / 5 * 100, 2),
         'attendance_hours': time_spent_hours,
         'time_spent_hours': time_spent_hours,
+        'time_spent_minutes': time_spent_minutes,
+        # Tracking interactions
+        'total_course_page_opens': total_course_opens,
+        'total_lesson_opens': lp_agg['total_lesson_opens'] or 0,
+        'total_video_plays': lp_agg['total_video_plays'] or 0,
+        'avg_watch_percent': round(float(lp_agg['avg_watch_percent'] or 0), 2),
+        # Certifications & objectifs
         'certifications_count': Certificate.objects.filter(user=user, is_revoked=False).count(),
         'objectives_achieved_percent': round(achieved_objectives / total_objectives * 100, 2) if total_objectives else 0,
         'overdue_count': overdue_count,

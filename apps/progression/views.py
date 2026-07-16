@@ -5,11 +5,13 @@ from rest_framework.views import APIView
 
 from apps.core.constants import Roles
 from apps.core.permissions import HasRole
-from apps.progression.models import ChapterUnlock, ChapterValidation, CourseProgressionSettings, LessonProgress, XAPIStatement
+from apps.progression.models import ChapterUnlock, ChapterValidation, CourseProgressionSettings, CourseView, LessonProgress, XAPIStatement
 from apps.progression.serializers import (
     ChapterStatusSerializer,
     ChapterValidationSerializer,
     CourseProgressionSettingsSerializer,
+    CourseViewSerializer,
+    LessonEventSerializer,
     LessonProgressSerializer,
     LessonProgressUpdateSerializer,
     XAPIStatementSerializer,
@@ -21,6 +23,8 @@ from apps.progression.services import (
     is_final_exam_unlocked,
     is_lesson_accessible,
     ordered_chapters,
+    record_course_view,
+    record_lesson_event,
     record_lesson_progress,
 )
 
@@ -167,6 +171,148 @@ class ChapterValidationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(validated_by=self.request.user)
+
+
+class LessonEventView(APIView):
+    """POST /lessons/{id}/event/
+    Enregistre un événement discret d'apprentissage (open, play, pause, document_view…).
+    Appelé par le frontend/mobile à chaque interaction clé pour alimenter les KPI de tracking."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, lesson_id):
+        from apps.courses.models import Lesson
+
+        lesson = Lesson.objects.select_related('chapter__section__course').get(pk=lesson_id)
+        serializer = LessonEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        record_lesson_event(
+            user=request.user,
+            lesson=lesson,
+            verb=data['verb'],
+            position_seconds=data.get('position_seconds'),
+            time_spent_delta=data.get('time_spent_delta', 0),
+        )
+        return Response({'status': 'ok'}, status=201)
+
+
+class LessonStatsView(APIView):
+    """GET /lessons/{id}/stats/
+    Statistiques détaillées d'une leçon : ouvertures, lectures vidéo, temps passé, complétion.
+    Accessible aux admins, RH, managers et formateurs."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, lesson_id):
+        from django.db.models import Avg, Count, Sum
+
+        from apps.courses.models import Lesson
+
+        lesson = Lesson.objects.select_related('chapter__section__course').get(pk=lesson_id)
+        qs = LessonProgress.objects.filter(lesson=lesson)
+
+        total_openers = qs.filter(open_count__gt=0).count()
+        agg = qs.aggregate(
+            total_opens=Sum('open_count'),
+            total_plays=Sum('video_play_count'),
+            avg_watch_percent=Avg('watch_percent'),
+            avg_time_seconds=Avg('time_spent_seconds'),
+            total_time_seconds=Sum('time_spent_seconds'),
+            completions=Count('id', filter=__import__('django.db.models', fromlist=['Q']).Q(is_completed=True)),
+        )
+        total_learners = qs.count()
+
+        return Response({
+            'lesson_id': lesson_id,
+            'lesson_title': lesson.title,
+            'total_learners': total_learners,
+            'total_openers': total_openers,
+            'total_opens': agg['total_opens'] or 0,
+            'total_video_plays': agg['total_plays'] or 0,
+            'avg_watch_percent': round(float(agg['avg_watch_percent'] or 0), 2),
+            'avg_time_spent_minutes': round((agg['avg_time_seconds'] or 0) / 60, 2),
+            'total_time_spent_hours': round((agg['total_time_seconds'] or 0) / 3600, 2),
+            'completion_count': agg['completions'] or 0,
+            'completion_rate': round((agg['completions'] or 0) / total_learners * 100, 2) if total_learners else 0,
+        })
+
+
+class CourseViewLogView(APIView):
+    """POST /courses/{id}/view/
+    Incrémente le compteur d'ouvertures de la page cours pour l'utilisateur courant.
+    Appelé par le frontend dès que la page de détail du cours est affichée."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, course_id):
+        from apps.courses.models import Course
+
+        course = Course.objects.get(pk=course_id)
+        record_course_view(request.user, course)
+        obj = CourseView.objects.get(user=request.user, course=course)
+        return Response(CourseViewSerializer(obj).data, status=201)
+
+
+class CourseStatsView(APIView):
+    """GET /courses/{id}/stats/
+    Statistiques complètes d'un cours : vues, leçons ouvertes, lectures vidéo, temps, progression.
+    Accessible aux admins, RH, formateurs et managers."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, course_id):
+        from django.db.models import Avg, Q, Sum
+
+        from apps.courses.models import Course, Enrollment, Lesson
+
+        course = Course.objects.get(pk=course_id)
+        enrollments = Enrollment.objects.filter(course=course)
+        lesson_ids = list(Lesson.objects.filter(chapter__section__course=course).values_list('id', flat=True))
+        lp_qs = LessonProgress.objects.filter(lesson_id__in=lesson_ids)
+        view_qs = CourseView.objects.filter(course=course)
+
+        enroll_count = enrollments.count()
+        completed_count = enrollments.filter(status=Enrollment.STATUS_COMPLETED).count()
+        lp_agg = lp_qs.aggregate(
+            total_opens=Sum('open_count'),
+            total_plays=Sum('video_play_count'),
+            total_time_s=Sum('time_spent_seconds'),
+            avg_time_s=Avg('time_spent_seconds'),
+        )
+        views_agg = view_qs.aggregate(total_opens=Sum('open_count'))
+
+        # Par leçon : top 5 les plus vues
+        from django.db.models import Sum as S
+        top_lessons = (
+            lp_qs.values('lesson__id', 'lesson__title')
+            .annotate(plays=S('video_play_count'), opens=S('open_count'), time_s=S('time_spent_seconds'))
+            .order_by('-plays')[:5]
+        )
+
+        # Progression moyenne par leçon
+        lesson_progress = (
+            lp_qs.values('lesson__id', 'lesson__title')
+            .annotate(avg_watch=Avg('watch_percent'), completions=__import__('django.db.models', fromlist=['Count']).Count('id', filter=Q(is_completed=True)))
+            .order_by('lesson__id')
+        )
+
+        return Response({
+            'course_id': course_id,
+            'course_title': course.title,
+            'total_enrolled': enroll_count,
+            'completion_count': completed_count,
+            'completion_rate': round(completed_count / enroll_count * 100, 2) if enroll_count else 0,
+            'avg_progress_percent': round(float(enrollments.aggregate(avg=Avg('progress_percent'))['avg'] or 0), 2),
+            'total_course_page_opens': views_agg['total_opens'] or 0,
+            'unique_visitors': view_qs.count(),
+            'total_lesson_opens': lp_agg['total_opens'] or 0,
+            'total_video_plays': lp_agg['total_plays'] or 0,
+            'total_time_spent_hours': round((lp_agg['total_time_s'] or 0) / 3600, 2),
+            'avg_time_per_learner_minutes': round((lp_agg['avg_time_s'] or 0) / 60, 2),
+            'top_lessons_by_plays': list(top_lessons),
+            'lesson_progress': list(lesson_progress),
+        })
 
 
 class XAPIStatementViewSet(viewsets.ModelViewSet):

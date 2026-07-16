@@ -1,6 +1,7 @@
+from django.db.models import F
 from django.utils import timezone
 
-from apps.progression.models import ChapterUnlock, ChapterValidation, CourseProgressionSettings, LessonProgress, XAPIStatement
+from apps.progression.models import ChapterUnlock, ChapterValidation, CourseProgressionSettings, CourseView, LessonProgress, XAPIStatement
 
 XAPI_VERB_IRIS = {
     'experienced': 'http://adlnet.gov/expapi/verbs/experienced',
@@ -29,6 +30,60 @@ def record_xapi_statement(user, verb, object_type, object_id, object_name='', re
         user=user, verb=verb, object_type=object_type, object_id=str(object_id),
         result=result or {}, raw_statement=statement,
     )
+
+
+_XAPI_VERB_FOR_EVENT = {
+    'open':              'experienced',
+    'play':              'experienced',
+    'pause':             'experienced',
+    'resume':            'experienced',
+    'complete':          'completed',
+    'document_view':     'experienced',
+    'document_download': 'experienced',
+}
+
+
+def record_lesson_event(user, lesson, verb, position_seconds=None, time_spent_delta=0):
+    """Enregistre un événement discret d'apprentissage (open, play, pause…) et met à jour
+    les compteurs sur LessonProgress de façon atomique (F-expressions), puis écrit un
+    statement xAPI."""
+
+    LessonProgress.objects.get_or_create(user=user, lesson=lesson)
+
+    updates = {}
+    if verb == 'open':
+        updates['open_count'] = F('open_count') + 1
+        updates['last_opened_at'] = timezone.now()
+    elif verb in ('play', 'resume'):
+        updates['video_play_count'] = F('video_play_count') + 1
+    elif verb == 'document_view':
+        updates['document_viewed'] = True
+
+    if time_spent_delta:
+        updates['time_spent_seconds'] = F('time_spent_seconds') + time_spent_delta
+
+    if updates:
+        LessonProgress.objects.filter(user=user, lesson=lesson).update(**updates)
+
+    record_xapi_statement(
+        user=user,
+        verb=_XAPI_VERB_FOR_EVENT.get(verb, 'experienced'),
+        object_type='lesson',
+        object_id=lesson.id,
+        object_name=lesson.title,
+        result={'verb_detail': verb, 'position_seconds': position_seconds},
+    )
+
+    # Si document ouvert → recalculer la progression du cours
+    if verb == 'document_view':
+        recompute_enrollment_progress(user, lesson.course)
+
+
+def record_course_view(user, course):
+    """Incrémente atomiquement le compteur d'ouvertures de la page cours pour cet utilisateur."""
+    obj, created = CourseView.objects.get_or_create(user=user, course=course)
+    if not created:
+        CourseView.objects.filter(pk=obj.pk).update(open_count=F('open_count') + 1)
 
 
 def get_progression_settings(course):

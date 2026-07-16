@@ -43,11 +43,31 @@ class LessonProgress(TimeStampedModel):
     time_spent_seconds = models.PositiveIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    # Tracking des interactions
+    open_count = models.PositiveIntegerField(default=0, help_text='Nombre de fois que la leçon a été ouverte')
+    video_play_count = models.PositiveIntegerField(default=0, help_text='Nombre de fois que la vidéo a été lancée')
+    last_opened_at = models.DateTimeField(null=True, blank=True, help_text='Dernière ouverture de la leçon')
+
     class Meta:
         unique_together = ('user', 'lesson')
 
     def __str__(self):
         return f'{self.user} – {self.lesson}'
+
+
+class CourseView(TimeStampedModel):
+    """Comptabilise les ouvertures de page cours par utilisateur."""
+
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='course_views')
+    course = models.ForeignKey('courses.Course', on_delete=models.CASCADE, related_name='user_views')
+    open_count = models.PositiveIntegerField(default=1, help_text='Nombre de fois que la page cours a été ouverte')
+    last_opened_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'course')
+
+    def __str__(self):
+        return f'{self.user} – {self.course} ({self.open_count} ouvertures)'
 
 
 class ChapterUnlock(TimeStampedModel):
