@@ -1,5 +1,10 @@
+import uuid
+
 from django.conf import settings
 from django.core.files.storage import default_storage
+
+def max_direct_upload_bytes():
+    return settings.MAX_DIRECT_UPLOAD_MB * 1024 * 1024
 
 
 def r2_media_storage():
@@ -11,3 +16,28 @@ def r2_media_storage():
     from storages.backends.s3 import S3Storage
 
     return S3Storage()
+
+
+def generate_presigned_upload(*, filename, content_type, folder):
+    """Presigned PUT URL so the browser uploads a lesson's video/document straight to
+    R2 — the bytes never transit the Django server, sidestepping nginx/Cloudflare body
+    size limits entirely for large course videos."""
+    import boto3
+    from botocore.client import Config as BotoConfig
+
+    client = boto3.client(
+        's3',
+        endpoint_url=settings.AWS_S3_ENDPOINT_URL,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME,
+        config=BotoConfig(signature_version=settings.AWS_S3_SIGNATURE_VERSION),
+    )
+    ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'bin'
+    key = f'{folder}/{uuid.uuid4().hex}.{ext}'
+    upload_url = client.generate_presigned_url(
+        'put_object',
+        Params={'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': key, 'ContentType': content_type},
+        ExpiresIn=900,
+    )
+    return {'upload_url': upload_url, 'key': key, 'content_type': content_type}

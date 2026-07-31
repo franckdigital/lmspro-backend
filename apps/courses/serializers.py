@@ -34,11 +34,39 @@ class ScormCommitSerializer(serializers.Serializer):
 
 
 class LessonSerializer(serializers.ModelSerializer):
+    """`video_file_key`/`document_file_key` attach a file already uploaded straight to
+    R2 via the presign-upload flow — the object exists in the bucket already, this just
+    points the FileField at it (no bytes pass through this serializer)."""
+
     resources = LessonResourceSerializer(many=True, read_only=True)
+    video_file_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    document_file_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = Lesson
         fields = '__all__'
+
+    def _attach_direct_upload_keys(self, instance, video_key, document_key):
+        if video_key:
+            instance.video_file.name = video_key
+        if document_key:
+            instance.document_file.name = document_key
+        if video_key or document_key:
+            instance.save()
+
+    def create(self, validated_data):
+        video_key = validated_data.pop('video_file_key', None)
+        document_key = validated_data.pop('document_file_key', None)
+        instance = super().create(validated_data)
+        self._attach_direct_upload_keys(instance, video_key, document_key)
+        return instance
+
+    def update(self, instance, validated_data):
+        video_key = validated_data.pop('video_file_key', None)
+        document_key = validated_data.pop('document_file_key', None)
+        instance = super().update(instance, validated_data)
+        self._attach_direct_upload_keys(instance, video_key, document_key)
+        return instance
 
 
 class LessonLightSerializer(serializers.ModelSerializer):

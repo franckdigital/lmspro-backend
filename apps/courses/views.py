@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db.models import Q
 from django.http import Http404
 from rest_framework import permissions, viewsets
@@ -135,6 +136,33 @@ class LessonViewSet(viewsets.ModelViewSet):
     serializer_class = LessonSerializer
     permission_classes = [IsContentManager]
     filterset_fields = ['chapter', 'content_type']
+
+    @action(detail=False, methods=['post'], url_path='presign-upload')
+    def presign_upload(self, request):
+        """Step 1 of a direct browser->R2 upload (bypasses nginx/Cloudflare body-size
+        limits entirely for large course videos): hand back a short-lived signed PUT
+        URL, never touching the file's bytes ourselves."""
+        from apps.core.storage import generate_presigned_upload, max_direct_upload_bytes
+
+        if not settings.USE_R2_STORAGE:
+            return Response({'detail': "L'upload direct n'est pas configuré (R2 désactivé)."}, status=400)
+
+        filename = request.data.get('filename') or ''
+        content_type = request.data.get('content_type') or 'application/octet-stream'
+        kind = request.data.get('kind') or 'document'
+        try:
+            size = int(request.data.get('size') or 0)
+        except (TypeError, ValueError):
+            size = 0
+
+        if not filename:
+            return Response({'detail': 'filename requis.'}, status=400)
+        max_bytes = max_direct_upload_bytes()
+        if size > max_bytes:
+            return Response({'detail': f'Fichier trop volumineux (max {max_bytes // (1024 * 1024)} Mo).'}, status=400)
+
+        folder = 'courses/videos' if kind == 'video' else 'courses/documents'
+        return Response(generate_presigned_upload(filename=filename, content_type=content_type, folder=folder))
 
     @action(detail=True, methods=['post'], url_path='scorm-import')
     def scorm_import(self, request, pk=None):

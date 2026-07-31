@@ -140,6 +140,10 @@ AWS_DEFAULT_ACL = None
 AWS_S3_FILE_OVERWRITE = False
 AWS_QUERYSTRING_EXPIRE = config('SIGNED_URL_TTL_SECONDS', default=600, cast=int)
 
+# Max size for a lesson video/document uploaded directly to R2 (browser -> R2, bypasses
+# nginx/Cloudflare entirely, so this is an app-level cap, not an infra one).
+MAX_DIRECT_UPLOAD_MB = config('MAX_DIRECT_UPLOAD_MB', default=1024, cast=int)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework
