@@ -56,6 +56,7 @@ class SuspiciousActivityEvent(TimeStampedModel):
     EVENT_RIGHT_CLICK_BLOCKED = 'right_click_blocked'
     EVENT_COPY_ATTEMPT = 'copy_attempt'
     EVENT_DRAG_ATTEMPT = 'drag_attempt'
+    EVENT_SEEK_FORWARD_BLOCKED = 'seek_forward_blocked'
     EVENT_TAB_BLUR_DURING_EXAM = 'tab_blur_during_exam'
     EVENT_SCREEN_RECORDING_SUSPECTED = 'screen_recording_suspected'
     EVENT_MULTIPLE_LOGIN_ATTEMPT = 'multiple_login_attempt'
@@ -65,6 +66,7 @@ class SuspiciousActivityEvent(TimeStampedModel):
         (EVENT_RIGHT_CLICK_BLOCKED, 'Clic droit bloqué'),
         (EVENT_COPY_ATTEMPT, 'Tentative de copie'),
         (EVENT_DRAG_ATTEMPT, 'Tentative de glisser-déposer'),
+        (EVENT_SEEK_FORWARD_BLOCKED, 'Saut en avant bloqué'),
         (EVENT_TAB_BLUR_DURING_EXAM, "Changement d'onglet pendant un examen"),
         (EVENT_SCREEN_RECORDING_SUSPECTED, "Enregistrement d'écran suspecté"),
         (EVENT_MULTIPLE_LOGIN_ATTEMPT, 'Tentative de connexion multiple'),

@@ -181,16 +181,41 @@ def is_final_exam_unlocked(user, course):
     return all(is_chapter_completed(user, chapter, settings) for chapter in ordered_chapters(course))
 
 
+def is_previous_lesson_completed(user, lesson):
+    """§26 — within an unlocked chapter, lessons must still be taken in order: lesson N+1
+    stays locked until lesson N (by `order`, same chapter) is completed."""
+    settings = get_progression_settings(lesson.course)
+    if not settings.sequential_enabled:
+        return True
+
+    siblings = list(lesson.chapter.lessons.order_by('order'))
+    index = next((i for i, l in enumerate(siblings) if l.id == lesson.id), None)
+    if index is None or index == 0:
+        return True
+
+    previous_lesson = siblings[index - 1]
+    progress = LessonProgress.objects.filter(user=user, lesson=previous_lesson).first()
+    return bool(progress and progress.is_completed)
+
+
 def is_lesson_accessible(user, lesson):
     if lesson.is_preview_free:
         return True
-    return is_chapter_unlocked(user, lesson.chapter)
+    if not is_chapter_unlocked(user, lesson.chapter):
+        return False
+    return is_previous_lesson_completed(user, lesson)
+
+
+MAX_PLAYBACK_RATE_TOLERANCE = 4  # generous allowance for e.g. 2x playback + buffering jitter
+MIN_ELAPSED_SLACK_SECONDS = 15   # floor so back-to-back calls (e.g. timeupdate then ended) aren't over-penalized
 
 
 def record_lesson_progress(
     user, lesson, watched_seconds=None, position_seconds=None, document_viewed=None, time_spent_delta=0,
     scorm_completed=None,
 ):
+    from apps.courses.models import Lesson
+
     progress, created = LessonProgress.objects.get_or_create(user=user, lesson=lesson)
     settings = get_progression_settings(lesson.course)
 
@@ -198,6 +223,14 @@ def record_lesson_progress(
         record_xapi_statement(user, 'experienced', 'lesson', lesson.id, object_name=lesson.title)
 
     if watched_seconds is not None:
+        # §26 anti-skip: a client can't inflate "furthest position reached" faster than
+        # realistic playback could have covered since the last update — this is what
+        # stops scrubbing straight to the end (or a crafted API call) from instantly
+        # completing a video. Rewinding/replaying is unaffected (max() only grows).
+        if not created and lesson.content_type == Lesson.TYPE_VIDEO:
+            elapsed = (timezone.now() - progress.updated_at).total_seconds()
+            max_allowed = progress.watched_seconds + max(elapsed, MIN_ELAPSED_SLACK_SECONDS) * MAX_PLAYBACK_RATE_TOLERANCE
+            watched_seconds = min(watched_seconds, max_allowed)
         progress.watched_seconds = max(progress.watched_seconds, watched_seconds)
         if lesson.duration_seconds:
             progress.watch_percent = min(100, round(progress.watched_seconds / lesson.duration_seconds * 100, 2))
