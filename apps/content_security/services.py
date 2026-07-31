@@ -90,7 +90,12 @@ def can_download_resource(resource, user):
 
 
 def is_origin_allowed(request):
+    """§25 — media URLs are signed and short-lived, but without this check they'd still
+    work if pasted straight into a new tab or fetched with curl, bypassing the player's
+    right-click/download blocking entirely. Requiring a matching Origin/Referer closes
+    that casual bypass (headers are spoofable, so this is dissuasion, not a hard
+    guarantee — the token TTL and per-user AccessLog trail are the real backstop)."""
     origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER')
     if not origin:
-        return True
+        return False
     return any(origin.startswith(allowed) for allowed in settings.CORS_ALLOWED_ORIGINS)
