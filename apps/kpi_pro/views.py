@@ -1,0 +1,241 @@
+from rest_framework import permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.core.constants import Roles
+from apps.core.permissions import HasRole
+from apps.kpi_pro.catalog import EMPLOYEE_CATEGORIES, TRAINER_CATEGORIES, build_kpi_rows
+from apps.kpi_pro.engine_dashboard import compute_nine_box, consolidated_dashboard, department_heatmap
+from apps.kpi_pro.engine_employee import compute_employee_kpis
+from apps.kpi_pro.engine_trainer import compute_trainer_kpis, tpi_decomposition
+
+IsHRorAdmin = HasRole.for_roles(Roles.HR, Roles.COMPANY_ADMIN, Roles.TRAINING_CENTER_ADMIN)
+_LEARNER_ROLES = {Roles.EMPLOYEE, Roles.MANAGER, Roles.STUDENT}
+
+
+def _is_hr_admin(user):
+    return user.is_superuser or user.role in (Roles.SUPER_ADMIN, Roles.HR, Roles.COMPANY_ADMIN, Roles.TRAINING_CENTER_ADMIN)
+
+
+def _resolve_company(request):
+    """Resolve the company to report on, honouring ?company=<id> drill-down for super admins
+    and subsidiary drill-down for company admins/HR (must stay within their company tree)."""
+    from apps.tenants.models import Company
+
+    user = request.user
+    company_param = request.query_params.get('company')
+
+    if user.is_superuser or user.role == Roles.SUPER_ADMIN:
+        if not company_param:
+            return None
+        try:
+            return Company.objects.get(pk=company_param)
+        except Company.DoesNotExist:
+            return None
+
+    if user.company_id is None:
+        return None
+    if company_param:
+        try:
+            requested_id = int(company_param)
+        except (ValueError, TypeError):
+            requested_id = None
+        if requested_id is not None and requested_id in user.company.get_descendant_ids():
+            return Company.objects.get(id=requested_id)
+    return user.company
+
+
+class EmployeeKPIView(APIView):
+    """GET /api/kpi-pro/employees/ — 100 KPI employés, scope: company (+filiales) / département / employé."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import User
+
+        user = request.user
+
+        if user.role == Roles.MANAGER:
+            team_ids = list(User.objects.filter(manager=user, role__in=_LEARNER_ROLES).values_list('id', flat=True))
+            scope_label = 'Mon équipe'
+            user_ids = team_ids
+        elif _is_hr_admin(user):
+            company = _resolve_company(request)
+            if company is None:
+                return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+            company_ids = company.get_descendant_ids()
+            qs = User.objects.filter(company_id__in=company_ids, role__in=_LEARNER_ROLES)
+
+            department_id = request.query_params.get('department')
+            if department_id:
+                qs = qs.filter(department_id=department_id)
+
+            single_user_id = request.query_params.get('user')
+            if single_user_id:
+                qs = qs.filter(id=single_user_id)
+
+            user_ids = list(qs.values_list('id', flat=True))
+            scope_label = company.name
+        else:
+            return Response({'detail': 'Accès non autorisé.'}, status=403)
+
+        values = compute_employee_kpis(user_ids)
+        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values)
+        return Response({
+            'scope': scope_label,
+            'headcount': len(user_ids),
+            'categories': categories,
+            'values': values,
+        })
+
+
+class EmployeeKPIDetailView(APIView):
+    """GET /api/kpi-pro/employees/<user_id>/ — les 100 KPI pour un seul employé (fiche individuelle)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, user_id):
+        from apps.accounts.models import User
+
+        target = User.objects.get(pk=user_id)
+        requester = request.user
+        allowed = (
+            target.id == requester.id
+            or _is_hr_admin(requester)
+            or (requester.role == Roles.MANAGER and target.manager_id == requester.id)
+        )
+        if not allowed:
+            return Response({'detail': 'Non autorisé.'}, status=403)
+
+        values = compute_employee_kpis([target.id])
+        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values)
+        return Response({
+            'scope': target.get_full_name() or target.email,
+            'headcount': 1,
+            'categories': categories,
+            'values': values,
+        })
+
+
+class DepartmentHeatmapView(APIView):
+    """GET /api/kpi-pro/employees/by-department/ — heatmap de compétences par département (Fig. 6)."""
+
+    permission_classes = [IsHRorAdmin]
+
+    def get(self, request):
+        company = _resolve_company(request)
+        if company is None:
+            return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+        company_ids = company.get_descendant_ids()
+        return Response(department_heatmap(company_ids))
+
+
+class TrainerKPIView(APIView):
+    """GET /api/kpi-pro/trainers/ — 50 KPI formateurs + TPI. Scope: entreprise (tous formateurs) ou un formateur."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import User
+
+        user = request.user
+
+        if user.role == Roles.TRAINER:
+            trainer_ids = [user.id]
+            scope_label = user.get_full_name() or user.email
+        elif _is_hr_admin(user):
+            company = _resolve_company(request)
+            if company is None:
+                return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+            company_ids = company.get_descendant_ids()
+            qs = User.objects.filter(company_id__in=company_ids, role=Roles.TRAINER)
+
+            trainer_id = request.query_params.get('trainer')
+            if trainer_id:
+                qs = qs.filter(id=trainer_id)
+
+            trainer_ids = list(qs.values_list('id', flat=True))
+            scope_label = company.name
+        else:
+            return Response({'detail': 'Accès non autorisé.'}, status=403)
+
+        if not trainer_ids:
+            values = {}
+            categories = build_kpi_rows(TRAINER_CATEGORIES, {})
+        else:
+            values = compute_trainer_kpis(trainer_ids)
+            categories = build_kpi_rows(TRAINER_CATEGORIES, values)
+
+        return Response({
+            'scope': scope_label,
+            'trainer_count': len(trainer_ids),
+            'categories': categories,
+            'values': values,
+            'tpi': {
+                'score': values.get('tpi_score', 0),
+                'decomposition': tpi_decomposition(values) if values else [],
+            },
+        })
+
+
+class TrainerRankingView(APIView):
+    """GET /api/kpi-pro/trainers/ranking/ — classement multi-critères de tous les formateurs d'une entreprise."""
+
+    permission_classes = [IsHRorAdmin]
+
+    def get(self, request):
+        from apps.accounts.models import User
+
+        company = _resolve_company(request)
+        if company is None:
+            return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+        company_ids = company.get_descendant_ids()
+        trainers = User.objects.filter(company_id__in=company_ids, role=Roles.TRAINER)
+
+        rows = []
+        for trainer in trainers:
+            values = compute_trainer_kpis([trainer.id])
+            rows.append({
+                'trainer_id': trainer.id,
+                'full_name': trainer.get_full_name() or trainer.email,
+                'tpi': values.get('tpi_score', 0),
+                'satisfaction': values.get('avg_satisfaction', 0),
+                'success_rate': values.get('learner_success_rate', 0),
+            })
+        rows.sort(key=lambda r: r['tpi'], reverse=True)
+        return Response(rows)
+
+
+class DashboardRHView(APIView):
+    """GET /api/kpi-pro/dashboard/ — vue consolidée DRH : 9-box talents, budget, KPI transverses."""
+
+    permission_classes = [IsHRorAdmin]
+
+    def get(self, request):
+        company = _resolve_company(request)
+        if company is None:
+            return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+        return Response(consolidated_dashboard(company, include_subsidiaries=True))
+
+
+class NineBoxView(APIView):
+    """GET /api/kpi-pro/nine-box/ — matrice 9-box seule (pour la vue manager, périmètre équipe)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import User
+
+        user = request.user
+        if user.role == Roles.MANAGER:
+            user_ids = list(User.objects.filter(manager=user, role__in=_LEARNER_ROLES).values_list('id', flat=True))
+        elif _is_hr_admin(user):
+            company = _resolve_company(request)
+            if company is None:
+                return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+            company_ids = company.get_descendant_ids()
+            user_ids = list(User.objects.filter(company_id__in=company_ids, role__in=_LEARNER_ROLES).values_list('id', flat=True))
+        else:
+            return Response({'detail': 'Accès non autorisé.'}, status=403)
+
+        return Response(compute_nine_box(user_ids))
