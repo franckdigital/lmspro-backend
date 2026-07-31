@@ -22,6 +22,24 @@ def _avg(values):
     return round(sum(values) / len(values), 2) if values else 0.0
 
 
+def _resolve_scope_company_ids(user_ids):
+    """Résout le périmètre entreprise (racine + toutes ses filiales) pour un ensemble
+    d'utilisateurs — peu importe qu'ils appartiennent à la maison-mère ou à une filiale,
+    afin de rester cohérent avec le référentiel de postes/classes virtuelles partagé
+    au niveau du groupe (même logique que `company_hr_dashboard`)."""
+    from apps.accounts.models import User
+    from apps.tenants.models import Company
+
+    company_ids = set(
+        User.objects.filter(id__in=user_ids).exclude(company_id__isnull=True).values_list('company_id', flat=True)
+    )
+    resolved = set()
+    for company in Company.objects.filter(id__in=company_ids).select_related('parent'):
+        root = company.parent or company
+        resolved |= root.get_descendant_ids()
+    return resolved
+
+
 def compute_employee_kpis(user_ids):
     """user_ids: iterable of learner user ids defining the scope (1 employee, a department,
     or a whole company). Returns a flat dict keyed by the `key` column of catalog.EMPLOYEE_CATEGORIES."""
@@ -117,6 +135,13 @@ def compute_employee_kpis(user_ids):
 
     forum_active_users = ForumPost.objects.filter(author_id__in=user_ids).values('author_id').distinct().count()
 
+    # Absences = classes attendues par personne dans l'entreprise (classes disponibles x effectif)
+    # moins les présences réellement enregistrées ; ~40% considérées "justifiées" (heuristique).
+    from apps.virtual_classes.models import VirtualClass
+
+    expected_classes = VirtualClass.objects.filter(company_id__in=_resolve_scope_company_ids(user_ids)).count()
+    missed_total = max(0, expected_classes * n - total_att)
+
     assignment_attempts = AssessmentAttempt.objects.filter(
         user_id__in=user_ids, assessment__assessment_type='assignment'
     )
@@ -134,7 +159,7 @@ def compute_employee_kpis(user_ids):
     values.update({
         'virtual_attendance_rate': _pct(full_attendance, total_att),
         'punctuality_rate': _pct(punctual, punctual + late),
-        'justified_absences': round(max(0, total_att - punctual - late) / n, 2),
+        'justified_absences': round(missed_total * 0.4 / n, 2),
         'late_count': round(late / n, 2),
         'workshop_participation_rate': _pct(active_30d, n),
         'forum_participation_rate': _pct(forum_active_users, n),
@@ -212,10 +237,9 @@ def compute_employee_kpis(user_ids):
     expired_skills = skills.filter(last_assessed_at__lt=two_years_ago).count()
     certified_skills = Certificate.objects.filter(user_id__in=user_ids, is_revoked=False).count()
 
-    scope_company_ids = set(
-        User.objects.filter(id__in=user_ids).exclude(company_id__isnull=True).values_list('company_id', flat=True)
+    scoped_reqs = JobRoleSkillRequirement.objects.filter(
+        job_role__company_id__in=_resolve_scope_company_ids(user_ids)
     )
-    scoped_reqs = JobRoleSkillRequirement.objects.filter(job_role__company_id__in=scope_company_ids)
 
     critical_reqs = scoped_reqs.filter(required_level__gte=4)
     critical_skill_ids = set(critical_reqs.values_list('skill_id', flat=True))
@@ -330,9 +354,17 @@ def compute_employee_kpis(user_ids):
     productivity_after = _avg(after_scores)
     quality_delta = round(productivity_after - productivity_before, 2) if before_scores else 0.0
 
-    company_budget_roi = None  # computed at dashboard level (needs TrainingBudgetEntry)
+    # ROI individuel — même formule que company_hr_dashboard (effectiveness x3, coût normalisé à 1 unité)
+    effectiveness = (_pct(completed_enrollments, total_enrollments) / 100) * (avg_score / 100)
+    training_roi = round(max(0, effectiveness * 300 - 100), 2)
 
+    from apps.ai_engine.models import DifficultyAlert
     from apps.courses.models import Review
+
+    post_training_incidents = round(DifficultyAlert.objects.filter(user_id__in=user_ids).count() / n, 2)
+    innovations_proposed = round(
+        ForumPost.objects.filter(author_id__in=user_ids, is_solution=True).count() / n, 2
+    )
 
     internal_satisfaction = _avg(list(
         Review.objects.filter(user_id__in=user_ids).values_list('rating', flat=True)
@@ -349,14 +381,14 @@ def compute_employee_kpis(user_ids):
         'processing_time_reduction': round(-abs(score_trend), 2),
         'procedure_respect': _pct(on_time_count, on_time_enrollments.count()) or global_perf,
         'internal_satisfaction': round(internal_satisfaction_pct, 2),
-        'post_training_incidents': 0,
+        'post_training_incidents': post_training_incidents,
         'sla_respect': round(_pct(on_time_count, on_time_enrollments.count()) or 95, 2),
-        'innovations_proposed': 0,
+        'innovations_proposed': innovations_proposed,
         'problem_resolution_rate': _pct(passed, passed + failed),
         'business_goals_reached': _pct(achieved_obj, total_obj),
         'strategic_projects_contrib': round(distinct_roles_covered / n * 20, 2),
         'global_performance_score': global_perf,
-        'training_roi': company_budget_roi if company_budget_roi is not None else 0,
+        'training_roi': training_roi,
     })
 
     # ── G. Soft Skills (dérivées des réponses d'évaluation 360°) ─────────────
