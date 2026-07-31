@@ -475,21 +475,37 @@ def compute_employee_kpis(user_ids):
     top_reco = CourseRecommendation.objects.filter(user_id__in=user_ids).order_by('-score').first()
     ai_recommendation = top_reco.course.title if top_reco else None
 
-    lpi = round(
-        values['participation_rate'] * 0.20
-        + values['igc_index'] * 0.20
-        + values['global_performance_score'] * 0.20
-        + values['virtual_attendance_rate'] * 0.15
-        + values['avg_global_score'] * 0.15
-        + _pct(certified_skills, max(1, n)) * 0.10
-    , 2)
+    # Composantes nommées du LPI — mêmes clés que catalog.LPI_WEIGHTS, pour la décomposition (Fig. 12).
+    values['engagement_score'] = values['participation_rate']
+    values['skill_score'] = values['igc_index']
+    values['performance_score'] = values['global_performance_score']
+    values['attendance_score'] = values['virtual_attendance_rate']
+    values['results_score'] = values['avg_global_score']
+    certified_users_count = Certificate.objects.filter(
+        user_id__in=user_ids, is_revoked=False
+    ).values('user_id').distinct().count()
+    values['certification_score'] = _pct(certified_users_count, n)
+
+    from apps.kpi_pro.catalog import LPI_WEIGHTS
+
+    lpi = sum(values[key] * weight for key, _label, weight in LPI_WEIGHTS)
 
     values.update({
         'dropout_risk_ai': dropout_risk,
         'failure_probability_ai': failure_probability,
         'evolution_potential_ai': evolution_potential,
         'ai_recommendation': ai_recommendation,
-        'lpi_index': min(100, lpi),
+        'lpi_index': min(100, round(lpi, 2)),
     })
 
     return values
+
+
+def lpi_decomposition(values):
+    from apps.kpi_pro.catalog import LPI_WEIGHTS
+
+    return [
+        {'key': key, 'label': label, 'weight': weight, 'score': values.get(key) or 0,
+         'contribution': round((values.get(key) or 0) * weight, 2)}
+        for key, label, weight in LPI_WEIGHTS
+    ]

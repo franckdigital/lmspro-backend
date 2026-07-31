@@ -4,9 +4,23 @@ from rest_framework.views import APIView
 
 from apps.core.constants import Roles
 from apps.core.permissions import HasRole
-from apps.kpi_pro.catalog import EMPLOYEE_CATEGORIES, RATABLE_TRAINER_KPIS, TRAINER_CATEGORIES, build_kpi_rows
-from apps.kpi_pro.engine_dashboard import compute_nine_box, consolidated_dashboard, department_heatmap
-from apps.kpi_pro.engine_employee import compute_employee_kpis
+from apps.kpi_pro.catalog import (
+    EMPLOYEE_CATEGORIES,
+    EMPLOYEE_KPI_DESCRIPTIONS,
+    RATABLE_TRAINER_KPIS,
+    TRAINER_CATEGORIES,
+    TRAINER_KPI_DESCRIPTIONS,
+    build_kpi_rows,
+)
+from apps.kpi_pro.engine_dashboard import (
+    ai_risk_scatter,
+    compute_nine_box,
+    consolidated_dashboard,
+    department_heatmap,
+    soft_skills_by_group,
+)
+from apps.kpi_pro.engine_employee import compute_employee_kpis, lpi_decomposition
+from apps.kpi_pro.engine_skills import skill_comparator
 from apps.kpi_pro.engine_trainer import compute_trainer_kpis, tpi_decomposition
 from apps.kpi_pro.models import TrainerRating
 from apps.kpi_pro.serializers import TrainerRatingSerializer
@@ -82,12 +96,13 @@ class EmployeeKPIView(APIView):
             return Response({'detail': 'Accès non autorisé.'}, status=403)
 
         values = compute_employee_kpis(user_ids)
-        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values)
+        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values, EMPLOYEE_KPI_DESCRIPTIONS)
         return Response({
             'scope': scope_label,
             'headcount': len(user_ids),
             'categories': categories,
             'values': values,
+            'lpi': {'score': values.get('lpi_index', 0), 'decomposition': lpi_decomposition(values)},
         })
 
 
@@ -110,12 +125,13 @@ class EmployeeKPIDetailView(APIView):
             return Response({'detail': 'Non autorisé.'}, status=403)
 
         values = compute_employee_kpis([target.id])
-        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values)
+        categories = build_kpi_rows(EMPLOYEE_CATEGORIES, values, EMPLOYEE_KPI_DESCRIPTIONS)
         return Response({
             'scope': target.get_full_name() or target.email,
             'headcount': 1,
             'categories': categories,
             'values': values,
+            'lpi': {'score': values.get('lpi_index', 0), 'decomposition': lpi_decomposition(values)},
         })
 
 
@@ -163,10 +179,10 @@ class TrainerKPIView(APIView):
 
         if not trainer_ids:
             values = {}
-            categories = build_kpi_rows(TRAINER_CATEGORIES, {})
+            categories = build_kpi_rows(TRAINER_CATEGORIES, {}, TRAINER_KPI_DESCRIPTIONS)
         else:
             values = compute_trainer_kpis(trainer_ids)
-            categories = build_kpi_rows(TRAINER_CATEGORIES, values)
+            categories = build_kpi_rows(TRAINER_CATEGORIES, values, TRAINER_KPI_DESCRIPTIONS)
 
         return Response({
             'scope': scope_label,
@@ -301,6 +317,13 @@ class TrainerRatingViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = TrainerRating.objects.select_related('trainer', 'evaluator', 'course')
         if _is_hr_admin(user):
+            company = _resolve_company(self.request)
+            if company is None:
+                return qs.none()
+            qs = qs.filter(trainer__company_id__in=company.get_descendant_ids())
+            trainer_id = self.request.query_params.get('trainer')
+            if trainer_id:
+                qs = qs.filter(trainer_id=trainer_id)
             return qs
         if user.role == Roles.TRAINER:
             return qs.filter(trainer=user)
@@ -354,3 +377,68 @@ class MyTrainersToRateView(APIView):
                 'already_rated': key in rated_pairs,
             })
         return Response(rows)
+
+
+class SkillComparatorView(APIView):
+    """GET /api/kpi-pro/skills/comparator/ — Comparateur IA : objectifs de poste vs compétences
+    réelles vs écarts à combler, avec recommandations de formation priorisées."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        user_id_param = request.query_params.get('user')
+
+        if user_id_param:
+            target_id = int(user_id_param)
+            if not (
+                target_id == user.id or _is_hr_admin(user)
+                or (user.role == Roles.MANAGER)
+            ):
+                return Response({'detail': 'Non autorisé.'}, status=403)
+            return Response(skill_comparator(None, user_id=target_id))
+
+        if user.role in (Roles.EMPLOYEE, Roles.STUDENT, Roles.TRAINER):
+            return Response(skill_comparator(None, user_id=user.id))
+
+        company = _resolve_company(request)
+        if company is None:
+            return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+        return Response(skill_comparator(company.get_descendant_ids()))
+
+
+class SoftSkillsGroupView(APIView):
+    """GET /api/kpi-pro/employees/soft-skills-groups/ — Radar comparatif Direction vs Opérationnel (Fig. 9)."""
+
+    permission_classes = [IsHRorAdmin]
+
+    def get(self, request):
+        company = _resolve_company(request)
+        if company is None:
+            return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+        return Response(soft_skills_by_group(company.get_descendant_ids()))
+
+
+class AIRiskScatterView(APIView):
+    """GET /api/kpi-pro/employees/risk-scatter/ — nuage de points prédiction IA (Fig. 11)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import User
+
+        user = request.user
+        if user.role == Roles.MANAGER:
+            user_ids = list(User.objects.filter(manager=user, role__in=_LEARNER_ROLES).values_list('id', flat=True))
+        elif _is_hr_admin(user):
+            company = _resolve_company(request)
+            if company is None:
+                return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+            user_ids = list(
+                User.objects.filter(company_id__in=company.get_descendant_ids(), role__in=_LEARNER_ROLES)
+                .values_list('id', flat=True)
+            )
+        else:
+            return Response({'detail': 'Accès non autorisé.'}, status=403)
+
+        return Response(ai_risk_scatter(user_ids))

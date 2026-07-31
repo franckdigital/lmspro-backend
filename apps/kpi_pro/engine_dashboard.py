@@ -102,6 +102,75 @@ def budget_breakdown(company_ids):
     }
 
 
+def soft_skills_by_group(company_ids):
+    """Comparaison des soft skills (catégorie G) entre managers et équipes opérationnelles (Fig. 9)."""
+    from apps.accounts.models import User
+    from apps.core.constants import Roles
+    from apps.kpi_pro.engine_employee import compute_employee_kpis
+
+    soft_keys = [
+        'leadership', 'communication', 'teamwork', 'adaptability', 'time_management',
+        'stress_management', 'creativity', 'initiative', 'decision_making', 'emotional_intelligence',
+    ]
+    dims = [
+        'Leadership', 'Communication', "Travail d'équipe", 'Adaptabilité', 'Gestion du temps',
+        'Gestion du stress', 'Créativité', 'Initiative', 'Prise de décision', 'Intelligence émotionnelle',
+    ]
+
+    management_ids = list(User.objects.filter(company_id__in=company_ids, role=Roles.MANAGER).values_list('id', flat=True))
+    operational_ids = list(User.objects.filter(company_id__in=company_ids, role=Roles.EMPLOYEE).values_list('id', flat=True))
+
+    mgmt_vals = compute_employee_kpis(management_ids) if management_ids else {}
+    ops_vals = compute_employee_kpis(operational_ids) if operational_ids else {}
+
+    return {
+        'dimensions': dims,
+        'management': [mgmt_vals.get(k, 0) for k in soft_keys],
+        'operational': [ops_vals.get(k, 0) for k in soft_keys],
+        'management_count': len(management_ids),
+        'operational_count': len(operational_ids),
+    }
+
+
+def ai_risk_scatter(user_ids):
+    """Nuage de points prédiction IA — progression x activité récente, coloré par score de risque (Fig. 11)."""
+    from datetime import timedelta
+
+    from django.db.models import Avg, Count
+    from django.utils import timezone
+
+    from apps.accounts.models import User
+    from apps.courses.models import Enrollment
+    from apps.progression.models import LessonProgress
+
+    now = timezone.now()
+    d30 = now - timedelta(days=30)
+
+    progress_by_user = {
+        row['user_id']: float(row['avg'] or 0)
+        for row in Enrollment.objects.filter(user_id__in=user_ids).values('user_id').annotate(avg=Avg('progress_percent'))
+    }
+    from django.db.models import Sum
+
+    connections_by_user = {
+        row['user_id']: row['c'] or 0
+        for row in LessonProgress.objects.filter(user_id__in=user_ids, last_opened_at__gte=d30)
+        .values('user_id').annotate(c=Sum('open_count'))
+    }
+
+    points = []
+    for user in User.objects.filter(id__in=user_ids).only('id', 'first_name', 'last_name', 'email', 'last_active_at'):
+        progress = round(progress_by_user.get(user.id, 0), 1)
+        connections = connections_by_user.get(user.id, 0)
+        inactivity_days = (now - user.last_active_at).days if user.last_active_at else 60
+        risk = max(0, min(100, round((100 - progress) * 0.5 + min(inactivity_days, 60) / 60 * 100 * 0.5, 1)))
+        points.append({
+            'user_id': user.id, 'full_name': user.get_full_name() or user.email,
+            'progress': progress, 'connections': connections, 'risk_score': risk,
+        })
+    return points
+
+
 def department_heatmap(company_ids):
     """Score composite par département — alimente la heatmap de compétences (Fig. 6)."""
     from apps.accounts.models import User

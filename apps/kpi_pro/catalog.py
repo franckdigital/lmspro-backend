@@ -10,6 +10,8 @@ pas des données constatées).
 EMPLOYEE_CATEGORIES = [
     {
         'id': 'A', 'label': "Engagement dans la Formation", 'chart': 'bar',
+        'intro': "Mesure l'implication réelle de chaque collaborateur sur la plateforme : connexions, "
+                 "durée d'activité, participation aux modules et interaction avec les contenus.",
         'kpis': [
             ('KPI 1', 'inscription_rate', "Taux d'inscription aux formations", '%', 'gte', 90),
             ('KPI 2', 'participation_rate', "Taux de participation", '%', 'gte', 80),
@@ -25,6 +27,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'B', 'label': "Assiduité", 'chart': 'donut_heatmap',
+        'intro': "Présence aux classes virtuelles, ponctualité, respect des échéances et participation aux ateliers.",
         'kpis': [
             ('KPI 11', 'virtual_attendance_rate', "Présence aux classes virtuelles", '%', 'gte', 90),
             ('KPI 12', 'punctuality_rate', "Ponctualité (sessions à l'heure)", '%', 'gte', 85),
@@ -40,6 +43,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'C', 'label': "Performance Pédagogique", 'chart': 'line_histogram',
+        'intro': "Scores aux examens, taux de réussite, progression mensuelle et annuelle par département.",
         'kpis': [
             ('KPI 21', 'avg_global_score', "Score moyen global", '%', 'gte', 75),
             ('KPI 22', 'best_score', "Meilleur score individuel", '%', 'none', None),
@@ -60,6 +64,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'D', 'label': "Compétences", 'chart': 'radar_heatmap',
+        'intro': "Matrice de compétences par poste, skill gap analysis, suivi des certifications et indice de polyvalence.",
         'kpis': [
             ('KPI 36', 'skills_acquired', "Nombre de compétences acquises", 'nb', 'gte', 8),
             ('KPI 37', 'avg_skill_level_pct', "Niveau moyen de compétence", '%', 'gte', 75),
@@ -80,6 +85,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'E', 'label': "Développement Professionnel", 'chart': 'bar',
+        'intro': "Suivi des plans de développement individuels, certifications, heures de formation et perspectives d'évolution.",
         'kpis': [
             ('KPI 51', 'dev_objectives_reached', "Objectifs de développement atteints", '%', 'gte', 100),
             ('KPI 52', 'dev_objectives_late', "Objectifs en retard", 'nb', 'lte', 0),
@@ -95,6 +101,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'F', 'label': "Performance Opérationnelle", 'chart': 'bar_roi',
+        'intro': "Corrélation entre les formations suivies et les résultats métier mesurables : productivité, qualité, ROI.",
         'kpis': [
             ('KPI 61', 'productivity_before', "Productivité avant formation", '%', 'none', None),
             ('KPI 62', 'productivity_after', "Productivité après formation", '%', 'gte_delta', 15),
@@ -115,6 +122,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'G', 'label': "Soft Skills", 'chart': 'radar',
+        'intro': "Compétences comportementales évaluées via les campagnes 360° : leadership, communication, adaptabilité...",
         'kpis': [
             ('KPI 76', 'leadership', "Leadership", '%', 'gte', 70),
             ('KPI 77', 'communication', "Communication", '%', 'gte', 75),
@@ -130,6 +138,7 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'H', 'label': "Évaluation 360°", 'chart': 'radar_multi',
+        'intro': "Synthèse des évaluations croisées (auto, manager, RH, pairs) et potentiel de succession.",
         'kpis': [
             ('KPI 86', 'eval_self', "Auto-évaluation", '%', 'none', None),
             ('KPI 87', 'eval_manager', "Évaluation du manager", '%', 'none', None),
@@ -145,6 +154,8 @@ EMPLOYEE_CATEGORIES = [
     },
     {
         'id': 'I', 'label': "IA & Analytique", 'chart': 'scatter_donut',
+        'intro': "Prédictions générées à partir des signaux réels d'activité : risque d'abandon, probabilité d'échec, "
+                 "potentiel d'évolution et indice composite de performance d'apprentissage (LPI).",
         'kpis': [
             ('KPI 96', 'dropout_risk_ai', "Risque d'abandon (IA)", '%', 'alert_gte', 65),
             ('KPI 97', 'failure_probability_ai', "Probabilité d'échec (IA)", '%', 'alert_gte', 50),
@@ -158,6 +169,7 @@ EMPLOYEE_CATEGORIES = [
 TRAINER_CATEGORIES = [
     {
         'id': 'A', 'label': "Préparation Pédagogique", 'chart': 'bar',
+        'intro': "Qualité et fraîcheur des supports de cours, structuration pédagogique et diversité des ressources.",
         'kpis': [
             ('KPI F1', 'content_quality', "Qualité des supports pédagogiques", '%', 'gte', 80),
             ('KPI F2', 'content_freshness', "Actualisation des contenus (≤ 6 mois)", '%', 'gte', 100),
@@ -168,6 +180,7 @@ TRAINER_CATEGORIES = [
     },
     {
         'id': 'B', 'label': "Animation des Formations", 'chart': 'bar',
+        'intro': "Qualité de l'animation en direct : clarté, maîtrise, dynamisme, interactivité et adaptation au public.",
         'kpis': [
             ('KPI F6', 'clarity', "Clarté des explications (notes apprenants)", '%', 'gte', 80),
             ('KPI F7', 'subject_mastery', "Maîtrise du sujet (éval. expert)", '%', 'gte', 90),
@@ -183,6 +196,7 @@ TRAINER_CATEGORIES = [
     },
     {
         'id': 'C', 'label': "Satisfaction des Apprenants", 'chart': 'bar',
+        'intro': "Perception des apprenants : satisfaction, recommandation (NPS), disponibilité et fidélisation.",
         'kpis': [
             ('KPI F16', 'avg_satisfaction', "Note moyenne de satisfaction", '%', 'gte', 85),
             ('KPI F17', 'nps', "NPS (Net Promoter Score)", 'pts', 'gte', 30),
@@ -198,6 +212,7 @@ TRAINER_CATEGORIES = [
     },
     {
         'id': 'D', 'label': "Performance & Production de Contenu", 'chart': 'bar',
+        'intro': "Résultats mesurables des apprenants (réussite, progression, impact) et volume de contenu produit.",
         'kpis': [
             ('KPI F26', 'learner_success_rate', "Taux de réussite des apprenants", '%', 'gte', 78),
             ('KPI F27', 'learner_progress_pts', "Progression moyenne des apprenants", 'pts', 'gte', 10),
@@ -218,6 +233,7 @@ TRAINER_CATEGORIES = [
     },
     {
         'id': 'F', 'label': "Innovation & Professionnalisme", 'chart': 'bar',
+        'intro': "Usage de l'IA et de la gamification, méthodes pédagogiques innovantes et respect des engagements.",
         'kpis': [
             ('KPI F41', 'ai_usage', "Utilisation de l'IA dans la pédagogie", '%', 'gte', 50),
             ('KPI F42', 'gamification_usage', "Gamification intégrée", '%', 'gte', 60),
@@ -232,6 +248,175 @@ TRAINER_CATEGORIES = [
         ],
     },
 ]
+
+EMPLOYEE_KPI_DESCRIPTIONS = {
+    # A — Engagement
+    'inscription_rate': "Part des employés inscrits à au moins une formation, parmi l'effectif total du périmètre.",
+    'participation_rate': "Part des employés ayant ouvert un cours ou une leçon au cours des 30 derniers jours.",
+    'weekly_connection_rate': "Part des employés connectés à la plateforme au cours des 7 derniers jours.",
+    'avg_time_per_week_hours': "Temps moyen passé sur la plateforme par semaine, sur les 4 dernières semaines.",
+    'avg_courses_followed': "Nombre moyen de formations suivies (inscriptions) par employé.",
+    'avg_paths_completed': "Nombre moyen de parcours d'apprentissage menés jusqu'à leur terme par employé.",
+    'completion_rate': "Part des inscriptions menées jusqu'à 100% de progression, sur l'ensemble des inscriptions du périmètre.",
+    'dropout_rate': "Part des inscriptions abandonnées avant la fin, sur l'ensemble des inscriptions du périmètre.",
+    'avg_sessions_per_week': "Fréquence moyenne d'interaction avec la plateforme (ouvertures de cours/leçons) par semaine.",
+    'recent_activity_rate': "Part des employés ayant une activité de formation enregistrée dans les 7 derniers jours.",
+    # B — Assiduité
+    'virtual_attendance_rate': "Part des classes virtuelles suivies en intégralité (≥ 70% de la durée programmée).",
+    'punctuality_rate': "Part des connexions aux classes virtuelles effectuées dans les 5 minutes suivant l'heure prévue.",
+    'justified_absences': "Estimation du nombre moyen d'absences aux classes virtuelles considérées comme justifiées.",
+    'late_count': "Nombre moyen de connexions tardives (plus de 5 minutes de retard) aux classes virtuelles.",
+    'workshop_participation_rate': "Part des employés actifs sur la plateforme (ateliers/travaux dirigés) dans les 30 derniers jours.",
+    'forum_participation_rate': "Part des employés ayant publié au moins un message sur les forums de discussion.",
+    'practical_work_rate': "Part des devoirs pratiques (travaux à rendre) soumis ou corrigés parmi ceux assignés.",
+    'video_full_watch_rate': "Part des vidéos de formation visionnées à plus de 90% de leur durée.",
+    'document_read_rate': "Part des leçons pour lesquelles le support documentaire associé a été consulté.",
+    'deadline_respect_rate': "Part des formations terminées avant ou à la date d'échéance fixée.",
+    # C — Performance pédagogique
+    'avg_global_score': "Score moyen obtenu à l'ensemble des évaluations notées (quiz, examens).",
+    'best_score': "Meilleur score individuel obtenu par un employé du périmètre, toutes évaluations confondues.",
+    'worst_score': "Score le plus faible enregistré — un score sous le seuil d'alerte signale une difficulté à traiter en priorité.",
+    'avg_exams_passed': "Nombre moyen d'évaluations réussies (score ≥ seuil de passage) par employé.",
+    'avg_exams_failed': "Nombre moyen d'évaluations échouées par employé.",
+    'exam_success_rate': "Part des tentatives d'évaluation soldées par une réussite, sur l'ensemble des tentatives notées.",
+    'avg_attempts': "Nombre moyen de tentatives nécessaires par évaluation avant validation.",
+    'avg_days_to_pass': "Délai moyen, en jours, entre la première tentative et la tentative réussie sur une même évaluation.",
+    'score_trend_mom': "Écart entre le score moyen du dernier mois et celui du mois précédent (tendance à court terme).",
+    'monthly_progress': "Évolution du score moyen d'un mois sur l'autre, en points de pourcentage.",
+    'yearly_progress': "Évolution du score moyen par rapport à la même période il y a un an.",
+    'difficulties_detected': "Nombre de formations dont le score moyen des évaluations est inférieur à 50%.",
+    'hardest_modules': "Formations présentant le score moyen le plus faible sur le périmètre — signal des contenus à renforcer.",
+    'best_mastered_modules': "Formations présentant le score moyen le plus élevé sur le périmètre.",
+    'global_mastery_level': "Niveau de maîtrise global, équivalent au score moyen sur l'ensemble des évaluations.",
+    # D — Compétences
+    'skills_acquired': "Nombre moyen de compétences enregistrées avec un niveau supérieur à 0, par employé.",
+    'avg_skill_level_pct': "Niveau moyen de compétence (échelle 0–5 convertie en pourcentage) sur l'ensemble du référentiel.",
+    'critical_skills_mastered': "Part des compétences jugées critiques pour le poste (niveau requis ≥ 4) effectivement maîtrisées.",
+    'skills_gap_count': "Nombre moyen de compétences pour lesquelles le niveau requis par une fiche de poste n'est pas atteint.",
+    'skill_gap_global': "Écart global, en %, entre le niveau de compétence requis par les fiches de poste et le niveau réel constaté.",
+    'expired_skills': "Nombre moyen de compétences dont la dernière évaluation date de plus de 2 ans.",
+    'certified_skills': "Nombre moyen de certifications actives (non révoquées) obtenues par employé.",
+    'skill_progress_6m': "Progression estimée du niveau de compétence moyen sur les 6 derniers mois.",
+    'job_coverage_rate': "Part des compétences critiques du poste effectivement couvertes par l'employé.",
+    'versatility_index': "Nombre de fiches de poste différentes pour lesquelles l'employé couvre au moins une compétence acquise.",
+    'technical_level': "Niveau moyen sur les compétences classées « Outils & Technologies » du référentiel.",
+    'business_level': "Niveau moyen sur les compétences classées « Techniques Métier » du référentiel.",
+    'behavioral_level': "Niveau moyen sur les compétences comportementales (management, communication, transversales).",
+    'digital_level': "Niveau moyen sur les compétences numériques et outils digitaux.",
+    'igc_index': "Indice composite combinant niveau de compétence moyen, maîtrise des compétences critiques et écart de compétences.",
+    # E — Développement professionnel
+    'dev_objectives_reached': "Part des objectifs de développement individuel marqués comme atteints.",
+    'dev_objectives_late': "Nombre moyen d'objectifs de développement dont la date cible est dépassée sans être atteints.",
+    'pdi_completion': "Part des plans de développement individuel (PDI) clôturés avec le statut « terminé ».",
+    'official_certifications': "Nombre moyen de certifications officielles actives obtenues par employé.",
+    'training_hours_done': "Nombre d'heures de formation effectivement suivies sur la plateforme (30 derniers jours).",
+    'training_hours_left': "Écart entre l'objectif annuel de 40h de formation et les heures déjà réalisées.",
+    'recommended_trainings_done': "Part des formations recommandées par l'IA qui ont été suivies jusqu'à leur terme.",
+    'mandatory_trainings_done': "Part des formations obligatoires (affectées par l'entreprise) menées à terme.",
+    'promotion_eligibility': "Score composite (scores, compétences, objectifs atteints) utilisé comme indicateur d'éligibilité à une promotion.",
+    'mobility_readiness': "Part des fiches de poste de l'entreprise pour lesquelles l'employé couvre déjà les compétences requises.",
+    # F — Performance opérationnelle
+    'productivity_before': "Score moyen obtenu sur la première moitié des évaluations suivies (référence avant montée en compétence).",
+    'productivity_after': "Score moyen obtenu sur la deuxième moitié des évaluations suivies (après montée en compétence).",
+    'quality_evolution': "Écart entre la productivité après et avant formation — un écart positif traduit une amélioration réelle.",
+    'error_reduction': "Estimation de la réduction des erreurs opérationnelles, dérivée de l'évolution de la qualité mesurée.",
+    'processing_time_reduction': "Estimation de la réduction du temps de traitement des tâches clés, dérivée de la tendance des scores.",
+    'procedure_respect': "Part des formations terminées dans les délais impartis — utilisé comme proxy du respect des procédures.",
+    'internal_satisfaction': "Satisfaction moyenne exprimée dans les avis (5 étoiles) laissés par l'employé sur les formations suivies.",
+    'post_training_incidents': "Nombre moyen d'alertes de difficulté d'apprentissage enregistrées pour l'employé.",
+    'sla_respect': "Estimation du respect des délais contractuels, basée sur le respect des échéances de formation.",
+    'innovations_proposed': "Nombre moyen de contributions marquées comme « solution » sur les forums de la communauté.",
+    'problem_resolution_rate': "Part des évaluations réussies parmi l'ensemble des tentatives — proxy de la capacité à résoudre les difficultés.",
+    'business_goals_reached': "Part des objectifs de développement individuel atteints — utilisé comme proxy des objectifs métier.",
+    'strategic_projects_contrib': "Estimation de la contribution aux projets stratégiques, dérivée de la polyvalence de compétences.",
+    'global_performance_score': "Indice composite combinant score moyen, taux de complétion et niveau de compétence.",
+    'training_roi': "Retour sur investissement estimé de la formation, basé sur le taux de complétion et le score moyen obtenus.",
+    # G — Soft skills (issus des campagnes d'évaluation 360°)
+    'leadership': "Capacité à mobiliser et orienter une équipe, évaluée lors des campagnes 360°.",
+    'communication': "Clarté et efficacité de la communication, évaluée lors des campagnes 360°.",
+    'teamwork': "Qualité de la coopération avec les collègues, évaluée lors des campagnes 360°.",
+    'adaptability': "Capacité à s'adapter au changement, évaluée lors des campagnes 360°.",
+    'time_management': "Respect des délais et organisation du temps de travail, évalués lors des campagnes 360° (ou à défaut, respect des échéances de formation).",
+    'stress_management': "Capacité à gérer la pression, estimée à partir de l'adaptabilité et du respect des délais.",
+    'creativity': "Qualité et originalité du travail produit, évaluées lors des campagnes 360°.",
+    'initiative': "Prise d'initiative dans le travail quotidien, évaluée lors des campagnes 360°.",
+    'decision_making': "Capacité à prendre des décisions pertinentes, estimée à partir de l'orientation client et des compétences métier.",
+    'emotional_intelligence': "Capacité relationnelle et de coopération, estimée à partir de la communication et du travail d'équipe.",
+    # H — Évaluation 360°
+    'eval_self': "Score moyen de l'auto-évaluation soumise par l'employé lors des campagnes 360°.",
+    'eval_manager': "Score moyen attribué par le manager lors des campagnes d'évaluation 360°.",
+    'eval_hr': "Score moyen attribué par les RH lors des campagnes d'évaluation 360°.",
+    'eval_peers': "Score moyen attribué par les collègues (évaluation par les pairs) lors des campagnes 360°.",
+    'eval_internal_clients': "Score attribué par les clients internes — non disponible : aucun type d'évaluateur dédié dans le référentiel actuel.",
+    'eval_trainers': "Score moyen de l'évaluation finale consolidée lors des campagnes 360°.",
+    'eval_progress': "Écart entre le score 360° actuel et celui enregistré il y a plus d'un an.",
+    'leadership_potential': "Potentiel de leadership estimé à partir des compétences métier et de la prise d'initiative.",
+    'succession_index': "Indice de préparation à la succession, combinant score 360° global et polyvalence de compétences.",
+    'global_360_score': "Score moyen consolidé de l'ensemble des sources d'évaluation 360° disponibles.",
+    # I — IA & Analytique
+    'dropout_risk_ai': "Score de risque de décrochage, calculé à partir de la participation, du taux de complétion et de l'inactivité récente.",
+    'failure_probability_ai': "Probabilité d'échec aux évaluations, calculée à partir du taux de réussite et du score moyen.",
+    'evolution_potential_ai': "Potentiel d'évolution estimé, combinant indice de compétences, score 360° et score moyen aux évaluations.",
+    'ai_recommendation': "Formation la mieux notée par le moteur de recommandation IA pour cet employé, parmi celles non encore suivies.",
+    'lpi_index': "Learning Performance Index — indice composite pondéré (engagement, compétence, performance, assiduité, résultats, certification).",
+}
+
+TRAINER_KPI_DESCRIPTIONS = {
+    # A — Préparation pédagogique
+    'content_quality': "Part des formations disposant d'une image de présentation soignée (proxy de la qualité des supports).",
+    'content_freshness': "Part des formations mises à jour au cours des 6 derniers mois.",
+    'course_structuring': "Part des formations comportant au moins deux sections structurées.",
+    'objectives_respect': "Part des formations dont les objectifs pédagogiques (« ce que vous allez apprendre ») sont renseignés.",
+    'resource_diversity': "Part des formations proposant au moins une ressource complémentaire téléchargeable.",
+    # B — Animation
+    'clarity': "Clarté perçue des explications — dérivée de la note moyenne des avis, ou des notations directes des apprenants.",
+    'subject_mastery': "Maîtrise du sujet — dérivée du taux de réussite des apprenants aux évaluations du formateur.",
+    'communication_quality': "Qualité de la communication perçue par les apprenants.",
+    'audience_engagement': "Capacité à capter l'attention — dérivée du taux de complétion des formations du formateur.",
+    'time_management': "Respect du planning des sessions en direct (durée effective vs durée programmée).",
+    'dynamism': "Dynamisme et énergie perçus par les apprenants.",
+    'interactivity': "Niveau d'interactivité avec les apprenants — dérivé de l'activité sur les forums liés aux formations.",
+    'practical_demo_quality': "Qualité perçue des démonstrations pratiques.",
+    'level_adaptation': "Capacité à adapter le contenu au niveau des apprenants — dérivée du taux de rétention (inverse du décrochage).",
+    # C — Satisfaction
+    'avg_satisfaction': "Note moyenne de satisfaction sur les avis laissés sur les formations du formateur.",
+    'nps': "Net Promoter Score — écart entre la part de notes 5 étoiles (promoteurs) et de notes ≤ 3 (détracteurs).",
+    're_enrollment_rate': "Part des apprenants ayant suivi plus d'une formation de ce formateur (fidélisation).",
+    'positive_comments_rate': "Part des avis notés 4 étoiles ou plus.",
+    'avg_response_time_hours': "Délai moyen de réponse aux questions posées lors des classes virtuelles.",
+    'perceived_availability': "Disponibilité perçue, estimée à partir de la rapidité de réponse aux questions.",
+    'answer_quality': "Part des questions posées en classe virtuelle ayant reçu une réponse.",
+    'personalized_support': "Niveau d'accompagnement individualisé, estimé à partir du volume de réponses apportées.",
+    'global_satisfaction': "Satisfaction globale, équivalente à la note moyenne des avis.",
+    'learner_loyalty': "Part des apprenants revenus suivre plusieurs formations du même formateur.",
+    # D — Performance & production de contenu
+    'learner_success_rate': "Part des tentatives d'évaluation réussies sur les formations du formateur.",
+    'learner_progress_pts': "Progression moyenne des apprenants au-delà du seuil de passage (60%).",
+    'completion_rate': "Part des inscriptions menées à 100% sur les formations du formateur.",
+    'dropout_rate': "Part des inscriptions abandonnées sur les formations du formateur.",
+    'eval_difficulty_balance': "Part des scores obtenus se situant dans une plage de difficulté équilibrée (60–80%).",
+    'theory_practice_ratio': "Répartition entre évaluations théoriques (quiz) et pratiques (devoirs) sur les formations du formateur.",
+    'learner_certifications': "Nombre moyen de certificats délivrés par formation.",
+    'pedagogical_goals_reached': "Part des formations dont les objectifs pédagogiques annoncés sont renseignés.",
+    'final_level_reached': "Niveau moyen atteint par les apprenants aux évaluations notées.",
+    'impact_90d': "Impact mesuré après la formation — approximé par le taux de complétion global.",
+    'courses_published_year': "Nombre de formations publiées par le formateur au cours de l'année en cours.",
+    'modules_created': "Nombre total de chapitres créés dans les formations du formateur.",
+    'quizzes_created': "Nombre total de quiz et devoirs créés dans les formations du formateur.",
+    'content_update_frequency': "Délai moyen, en mois, depuis la dernière mise à jour des formations du formateur.",
+    'content_reuse_rate': "Estimation du taux de réutilisation des contenus, basée sur la structuration des sections.",
+    # F-G — Innovation & professionnalisme
+    'ai_usage': "Utilisation d'outils de génération de quiz par IA sur les formations du formateur.",
+    'gamification_usage': "Part des formations associées à un badge de récompense (gamification).",
+    'case_studies_per_course': "Nombre moyen de devoirs pratiques (études de cas) par formation.",
+    'simulations_per_course': "Nombre moyen de quiz/simulations par formation.",
+    'pedagogical_innovation': "Indice composite d'innovation pédagogique (usage de l'IA, gamification, interactivité).",
+    'deadline_respect': "Part des formations effectivement publiées (livrées) parmi celles créées.",
+    'schedule_respect': "Part des classes virtuelles dont la session s'est déroulée sans dépassement du calendrier prévu.",
+    'contractual_respect': "Respect des engagements contractuels — non tracé finement, valeur de référence par défaut.",
+    'hr_collaboration': "Niveau de collaboration avec les RH/managers, estimé à partir du renseignement des objectifs pédagogiques.",
+    'tpi_score': "Trainer Performance Index — score composite pondéré des 7 dimensions clés de performance du formateur.",
+}
 
 # Sous-ensemble des 50 KPI Formateurs directement perceptibles par un apprenant
 # (les autres — formations publiées, quiz créés, usage IA, respect des délais
@@ -340,9 +525,10 @@ def status_for(op, target, value):
     return None
 
 
-def build_kpi_rows(categories, values):
+def build_kpi_rows(categories, values, descriptions=None):
     """Merge a catalog (EMPLOYEE_CATEGORIES or TRAINER_CATEGORIES) with a computed `values` dict,
-    returning categories annotated with value/status for each KPI — ready for the frontend tables."""
+    returning categories annotated with value/status/description for each KPI — ready for the frontend tables."""
+    descriptions = descriptions or {}
     result = []
     for cat in categories:
         rows = []
@@ -353,8 +539,12 @@ def build_kpi_rows(categories, values):
                 'objective': _format_objective(op, target, unit),
                 'value': value,
                 'status': status_for(op, target, value),
+                'description': descriptions.get(key, ''),
             })
-        result.append({'id': cat['id'], 'label': cat['label'], 'chart': cat['chart'], 'kpis': rows})
+        result.append({
+            'id': cat['id'], 'label': cat['label'], 'chart': cat['chart'],
+            'intro': cat.get('intro', ''), 'kpis': rows,
+        })
     return result
 
 
