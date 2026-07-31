@@ -47,6 +47,7 @@ LOCAL_APPS = [
     'apps.certificates',
     'apps.hr_analytics',
     'apps.kpi_pro',
+    'apps.hr_agent',
     'apps.ai_engine',
     'apps.integrations',
     'apps.progression',

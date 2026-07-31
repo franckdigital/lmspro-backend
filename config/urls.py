@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/', include('apps.certificates.urls')),
     path('api/hr/', include('apps.hr_analytics.urls')),
     path('api/kpi-pro/', include('apps.kpi_pro.urls')),
+    path('api/hr-agent/', include('apps.hr_agent.urls')),
     path('api/ai/', include('apps.ai_engine.urls')),
     path('api/integrations/', include('apps.integrations.urls')),
     path('api/progression/', include('apps.progression.urls')),

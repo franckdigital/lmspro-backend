@@ -227,6 +227,19 @@ class Review(TimeStampedModel):
         return f'{self.course} – {self.rating}/5'
 
 
+class LessonReview(TimeStampedModel):
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='lesson_reviews')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='reviews')
+    rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('user', 'lesson')
+
+    def __str__(self):
+        return f'{self.lesson} – {self.rating}/5'
+
+
 class LessonQuestion(TimeStampedModel):
     """Per-lesson Q&A (Udemy-style), distinct from the course-level forum in apps.social."""
 

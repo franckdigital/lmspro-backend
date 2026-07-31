@@ -9,6 +9,7 @@ from apps.courses.views import (
     LessonAnswerViewSet,
     LessonPlayerView,
     LessonQuestionViewSet,
+    LessonReviewViewSet,
     LessonViewSet,
     ReviewViewSet,
     ScormRegistrationView,
@@ -23,6 +24,7 @@ router.register('lessons', LessonViewSet, basename='lesson')
 router.register('lesson-questions', LessonQuestionViewSet, basename='lesson-question')
 router.register('lesson-answers', LessonAnswerViewSet, basename='lesson-answer')
 router.register('reviews', ReviewViewSet, basename='review')
+router.register('lesson-reviews', LessonReviewViewSet, basename='lesson-review')
 router.register('enrollments', EnrollmentViewSet, basename='enrollment')
 router.register('training-requests', TrainingRequestViewSet, basename='training-request')
 

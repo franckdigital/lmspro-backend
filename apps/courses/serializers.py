@@ -9,6 +9,7 @@ from apps.courses.models import (
     LessonAnswer,
     LessonQuestion,
     LessonResource,
+    LessonReview,
     Review,
     ScormRegistration,
     TrainingRequest,
@@ -96,6 +97,15 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
+        fields = '__all__'
+        read_only_fields = ('user',)
+
+
+class LessonReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+
+    class Meta:
+        model = LessonReview
         fields = '__all__'
         read_only_fields = ('user',)
 

@@ -19,7 +19,7 @@ from apps.kpi_pro.engine_dashboard import (
     department_heatmap,
     soft_skills_by_group,
 )
-from apps.kpi_pro.engine_employee import compute_employee_kpis, lpi_decomposition
+from apps.kpi_pro.engine_employee import compute_employee_kpis, employee_content_breakdown, lpi_decomposition
 from apps.kpi_pro.engine_skills import skill_comparator
 from apps.kpi_pro.engine_trainer import compute_trainer_kpis, tpi_decomposition
 from apps.kpi_pro.models import TrainerRating
@@ -106,6 +106,14 @@ class EmployeeKPIView(APIView):
         })
 
 
+def _can_view_employee(requester, target):
+    return (
+        target.id == requester.id
+        or _is_hr_admin(requester)
+        or (requester.role == Roles.MANAGER and target.manager_id == requester.id)
+    )
+
+
 class EmployeeKPIDetailView(APIView):
     """GET /api/kpi-pro/employees/<user_id>/ — les 100 KPI pour un seul employé (fiche individuelle)."""
 
@@ -115,13 +123,7 @@ class EmployeeKPIDetailView(APIView):
         from apps.accounts.models import User
 
         target = User.objects.get(pk=user_id)
-        requester = request.user
-        allowed = (
-            target.id == requester.id
-            or _is_hr_admin(requester)
-            or (requester.role == Roles.MANAGER and target.manager_id == requester.id)
-        )
-        if not allowed:
+        if not _can_view_employee(request.user, target):
             return Response({'detail': 'Non autorisé.'}, status=403)
 
         values = compute_employee_kpis([target.id])
@@ -133,6 +135,22 @@ class EmployeeKPIDetailView(APIView):
             'values': values,
             'lpi': {'score': values.get('lpi_index', 0), 'decomposition': lpi_decomposition(values)},
         })
+
+
+class EmployeeContentDetailView(APIView):
+    """GET /api/kpi-pro/employees/<user_id>/content/ — le détail concret (cours, formations,
+    leçons) derrière les KPI de la fiche individuelle, pour une lecture explicable des scores."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, user_id):
+        from apps.accounts.models import User
+
+        target = User.objects.get(pk=user_id)
+        if not _can_view_employee(request.user, target):
+            return Response({'detail': 'Non autorisé.'}, status=403)
+
+        return Response(employee_content_breakdown(target.id))
 
 
 class DepartmentHeatmapView(APIView):

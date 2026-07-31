@@ -16,6 +16,7 @@ from apps.courses.models import (
     Lesson,
     LessonAnswer,
     LessonQuestion,
+    LessonReview,
     Review,
     ScormRegistration,
     TrainingRequest,
@@ -30,6 +31,7 @@ from apps.courses.serializers import (
     LessonAnswerSerializer,
     LessonPlayerSerializer,
     LessonQuestionSerializer,
+    LessonReviewSerializer,
     LessonSerializer,
     ReviewSerializer,
     ScormCommitSerializer,
@@ -311,6 +313,16 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         review = serializer.save()
         recompute_course_rating(review.course)
+
+
+class LessonReviewViewSet(viewsets.ModelViewSet):
+    queryset = LessonReview.objects.select_related('user', 'lesson').all()
+    serializer_class = LessonReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['lesson', 'user']
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):

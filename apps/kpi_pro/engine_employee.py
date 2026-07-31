@@ -509,3 +509,53 @@ def lpi_decomposition(values):
          'contribution': round((values.get(key) or 0) * weight, 2)}
         for key, label, weight in LPI_WEIGHTS
     ]
+
+
+def employee_content_breakdown(user_id):
+    """Le détail concret — Cours / Formations / Leçons — derrière les KPI d'un employé,
+    pour que la fiche individuelle explique visuellement ce qui alimente ses scores
+    plutôt que d'afficher des pourcentages abstraits."""
+    from django.db.models import F
+
+    from apps.courses.models import Enrollment, LessonReview
+    from apps.progression.models import LessonProgress
+    from apps.virtual_classes.models import VirtualClassAttendance
+
+    courses = list(
+        Enrollment.objects.filter(user_id=user_id)
+        .annotate(course_title=F('course__title'))
+        .order_by('-enrolled_at')
+        .values('id', 'course_id', 'course_title', 'status', 'progress_percent', 'enrolled_at', 'completed_at')[:20]
+    )
+
+    formations = list(
+        VirtualClassAttendance.objects.filter(user_id=user_id)
+        .annotate(formation_title=F('virtual_class__title'), scheduled_start=F('virtual_class__scheduled_start'))
+        .order_by('-virtual_class__scheduled_start')
+        .values('id', 'formation_title', 'scheduled_start', 'joined_at', 'left_at')[:20]
+    )
+
+    lesson_progresses = list(
+        LessonProgress.objects.filter(user_id=user_id, is_completed=True)
+        .select_related('lesson', 'lesson__chapter__section__course')
+        .order_by('-completed_at')[:20]
+    )
+    reviews_by_lesson = {
+        r.lesson_id: r
+        for r in LessonReview.objects.filter(
+            user_id=user_id, lesson_id__in=[lp.lesson_id for lp in lesson_progresses]
+        )
+    }
+    lessons = [
+        {
+            'id': lp.id,
+            'lesson_id': lp.lesson_id,
+            'lesson_title': lp.lesson.title,
+            'course_title': lp.lesson.course.title,
+            'completed_at': lp.completed_at,
+            'rating': reviews_by_lesson[lp.lesson_id].rating if lp.lesson_id in reviews_by_lesson else None,
+        }
+        for lp in lesson_progresses
+    ]
+
+    return {'courses': courses, 'formations': formations, 'lessons': lessons}
