@@ -3,6 +3,7 @@ from django.db import models
 from django.utils.text import slugify
 
 from apps.core.models import TimeStampedModel
+from apps.core.storage import r2_media_storage
 
 
 class Course(TimeStampedModel):
@@ -132,8 +133,8 @@ class Lesson(TimeStampedModel):
     order = models.PositiveIntegerField(default=0)
     content_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default=TYPE_VIDEO)
 
-    video_file = models.FileField(upload_to='courses/videos/', null=True, blank=True)
-    document_file = models.FileField(upload_to='courses/documents/', null=True, blank=True)
+    video_file = models.FileField(upload_to='courses/videos/', storage=r2_media_storage, null=True, blank=True)
+    document_file = models.FileField(upload_to='courses/documents/', storage=r2_media_storage, null=True, blank=True)
     scorm_package = models.FileField(upload_to='courses/scorm/', null=True, blank=True)
     scorm_launch_url = models.CharField(max_length=500, blank=True, help_text='Résolu automatiquement depuis imsmanifest.xml')
     scorm_version = models.CharField(max_length=10, blank=True, help_text="'1.2' ou '2004', détecté depuis le manifeste")

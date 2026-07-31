@@ -102,14 +102,14 @@ class SecureMediaFileView(APIView):
         wants_download = request.query_params.get('download') == '1'
         if wants_download and can_download_lesson(lesson, user):
             if lesson.content_type == Lesson.TYPE_PDF:
-                buffer = watermark_pdf(file_field.path, user)
+                buffer = watermark_pdf(file_field.open('rb'), user)
                 return FileResponse(buffer, as_attachment=True, filename=f'{lesson.title}.pdf')
             if lesson.content_type == Lesson.TYPE_IMAGE:
-                buffer = watermark_image(file_field.path, user)
+                buffer = watermark_image(file_field.open('rb'), user)
                 return FileResponse(buffer, as_attachment=True, filename=f'{lesson.title}.jpg')
-            return FileResponse(open(file_field.path, 'rb'), as_attachment=True, filename=file_field.name.split('/')[-1])
+            return FileResponse(file_field.open('rb'), as_attachment=True, filename=file_field.name.split('/')[-1])
 
-        return FileResponse(open(file_field.path, 'rb'))
+        return FileResponse(file_field.open('rb'))
 
 
 class SecureResourceTicketView(APIView):
@@ -163,8 +163,8 @@ class SecureResourceFileView(APIView):
         )
 
         if request.query_params.get('download') == '1' and can_download_resource(resource, user):
-            return FileResponse(open(resource.file.path, 'rb'), as_attachment=True, filename=resource.title)
-        return FileResponse(open(resource.file.path, 'rb'))
+            return FileResponse(resource.file.open('rb'), as_attachment=True, filename=resource.title)
+        return FileResponse(resource.file.open('rb'))
 
 
 class MyAccessLogView(APIView):

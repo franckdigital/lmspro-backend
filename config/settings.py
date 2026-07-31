@@ -126,6 +126,20 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Cloudflare R2 (S3-compatible) — used only for Lesson.video_file/document_file via
+# apps.core.storage.r2_media_storage, so avatars/certificates/etc. stay on local disk.
+USE_R2_STORAGE = config('USE_R2_STORAGE', default=False, cast=bool)
+AWS_ACCESS_KEY_ID = config('R2_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('R2_SECRET_ACCESS_KEY', default='')
+AWS_STORAGE_BUCKET_NAME = config('R2_BUCKET_NAME', default='')
+AWS_S3_ENDPOINT_URL = config('R2_ENDPOINT_URL', default='')
+AWS_S3_REGION_NAME = 'auto'
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_ADDRESSING_STYLE = 'path'
+AWS_DEFAULT_ACL = None
+AWS_S3_FILE_OVERWRITE = False
+AWS_QUERYSTRING_EXPIRE = config('SIGNED_URL_TTL_SECONDS', default=600, cast=int)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework

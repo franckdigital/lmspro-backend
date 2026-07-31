@@ -1,5 +1,6 @@
 import re
 import secrets
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -36,6 +37,12 @@ def package_lesson_video(lesson):
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            # ffmpeg needs a real local path — copy the source out of its storage
+            # backend (local disk or a remote one like R2) into the temp dir first.
+            source_path = Path(tmp_dir) / f'source{Path(lesson.video_file.name).suffix}'
+            with lesson.video_file.open('rb') as src, open(source_path, 'wb') as dst:
+                shutil.copyfileobj(src, dst)
+
             key_file_path = Path(tmp_dir) / 'enc.key'
             key_file_path.write_bytes(key_bytes)
 
@@ -44,7 +51,7 @@ def package_lesson_video(lesson):
 
             segment_duration = settings.HLS_SEGMENT_DURATION_SECONDS
             command = [
-                settings.FFMPEG_BINARY, '-y', '-i', lesson.video_file.path,
+                settings.FFMPEG_BINARY, '-y', '-i', str(source_path),
                 '-vf', "scale='min(1280,iw)':-2",
                 '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
                 '-c:a', 'aac', '-b:a', '128k',
