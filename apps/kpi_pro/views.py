@@ -1,13 +1,15 @@
-from rest_framework import permissions
+from rest_framework import permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.constants import Roles
 from apps.core.permissions import HasRole
-from apps.kpi_pro.catalog import EMPLOYEE_CATEGORIES, TRAINER_CATEGORIES, build_kpi_rows
+from apps.kpi_pro.catalog import EMPLOYEE_CATEGORIES, RATABLE_TRAINER_KPIS, TRAINER_CATEGORIES, build_kpi_rows
 from apps.kpi_pro.engine_dashboard import compute_nine_box, consolidated_dashboard, department_heatmap
 from apps.kpi_pro.engine_employee import compute_employee_kpis
 from apps.kpi_pro.engine_trainer import compute_trainer_kpis, tpi_decomposition
+from apps.kpi_pro.models import TrainerRating
+from apps.kpi_pro.serializers import TrainerRatingSerializer
 
 IsHRorAdmin = HasRole.for_roles(Roles.HR, Roles.COMPANY_ADMIN, Roles.TRAINING_CENTER_ADMIN)
 _LEARNER_ROLES = {Roles.EMPLOYEE, Roles.MANAGER, Roles.STUDENT}
@@ -239,3 +241,116 @@ class NineBoxView(APIView):
             return Response({'detail': 'Accès non autorisé.'}, status=403)
 
         return Response(compute_nine_box(user_ids))
+
+
+class EmployeeListView(APIView):
+    """GET /api/kpi-pro/employees/list/ — liste légère des employés du périmètre avec
+    quelques KPI de tête, pour la table de drilldown (clic -> fiche 100 KPI individuelle)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Q
+
+        from apps.accounts.models import User
+        from apps.hr_analytics.kpi import employee_kpis
+
+        user = request.user
+        if user.role == Roles.MANAGER:
+            qs = User.objects.filter(manager=user, role__in=_LEARNER_ROLES)
+        elif _is_hr_admin(user):
+            company = _resolve_company(request)
+            if company is None:
+                return Response({'detail': 'Sélectionnez une entreprise.'}, status=400)
+            qs = User.objects.filter(company_id__in=company.get_descendant_ids(), role__in=_LEARNER_ROLES)
+        else:
+            return Response({'detail': 'Accès non autorisé.'}, status=403)
+
+        department_id = request.query_params.get('department')
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+        search = request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(email__icontains=search)
+            )
+        limit = min(int(request.query_params.get('limit', 100) or 100), 500)
+
+        rows = []
+        for member in qs.select_related('department')[:limit]:
+            k = employee_kpis(member)
+            rows.append({
+                'id': member.id,
+                'full_name': member.get_full_name() or member.email,
+                'department': member.department.name if member.department else None,
+                'job_title': member.job_title,
+                'average_score': k['average_score'],
+                'progress_percent': k['progress_percent'],
+                'skills_percent': k['skills_percent'],
+            })
+        return Response({'count': qs.count(), 'results': rows})
+
+
+class TrainerRatingViewSet(viewsets.ModelViewSet):
+    """Notation d'un formateur par un apprenant sur les critères perceptibles (21 des 50 KPI Formateurs)."""
+
+    serializer_class = TrainerRatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = TrainerRating.objects.select_related('trainer', 'evaluator', 'course')
+        if _is_hr_admin(user):
+            return qs
+        if user.role == Roles.TRAINER:
+            return qs.filter(trainer=user)
+        return qs.filter(evaluator=user)
+
+    def perform_create(self, serializer):
+        serializer.save(evaluator=self.request.user)
+
+
+class RatableTrainerKPIsView(APIView):
+    """GET /api/kpi-pro/trainer-ratings/criteria/ — la liste des 21 critères notables par un apprenant."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response([{'key': key, 'label': label} for key, label in RATABLE_TRAINER_KPIS])
+
+
+class MyTrainersToRateView(APIView):
+    """GET /api/kpi-pro/trainer-ratings/my-trainers/ — mes formations (avec formateur assigné)
+    à noter, et si une notation existe déjà pour chacune."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.courses.models import Enrollment
+
+        user = request.user
+        enrollments = (
+            Enrollment.objects.filter(user=user, course__instructor__isnull=False)
+            .select_related('course', 'course__instructor')
+            .order_by('-created_at')
+        )
+        rated_pairs = set(
+            TrainerRating.objects.filter(evaluator=user).values_list('trainer_id', 'course_id')
+        )
+        seen = set()
+        rows = []
+        for enrollment in enrollments:
+            course = enrollment.course
+            key = (course.instructor_id, course.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({
+                'course_id': course.id,
+                'course_title': course.title,
+                'trainer_id': course.instructor_id,
+                'trainer_name': course.instructor.get_full_name() or course.instructor.email,
+                'enrollment_status': enrollment.status,
+                'already_rated': key in rated_pairs,
+            })
+        return Response(rows)

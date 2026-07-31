@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
-from apps.kpi_pro.catalog import TPI_WEIGHTS
+from apps.kpi_pro.catalog import RATABLE_TRAINER_KPIS, TPI_WEIGHTS
 
 
 def _pct(numerator, denominator, ndigits=1):
@@ -197,12 +197,37 @@ def compute_trainer_kpis(trainer_ids):
         'hr_collaboration': _pct(with_learn_points, total_courses),
     })
 
+    apply_real_ratings(values, trainer_ids)
+
     tpi = 0.0
     for key, _label, weight in TPI_WEIGHTS:
         tpi += (values.get(key) or 0) * weight
     values['tpi_score'] = round(tpi, 1)
 
     return values
+
+
+def apply_real_ratings(values, trainer_ids):
+    """Remplace les proxies heuristiques par les moyennes réelles des notations
+    apprenants (TrainerRating) pour les KPI de perception, quand elles existent."""
+    from apps.kpi_pro.models import TrainerRating
+
+    rating_rows = list(TrainerRating.objects.filter(trainer_id__in=trainer_ids).values_list('scores', flat=True))
+    if not rating_rows:
+        return
+
+    totals = {}
+    for scores in rating_rows:
+        for key, note in (scores or {}).items():
+            try:
+                totals.setdefault(key, []).append(float(note))
+            except (TypeError, ValueError):
+                continue
+
+    for key, _label in RATABLE_TRAINER_KPIS:
+        notes = totals.get(key)
+        if notes:
+            values[key] = round(sum(notes) / len(notes) / 5 * 100, 2)
 
 
 def tpi_decomposition(values):

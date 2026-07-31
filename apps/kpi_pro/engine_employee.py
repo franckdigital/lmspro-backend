@@ -231,14 +231,21 @@ def compute_employee_kpis(user_ids):
     total_required = sum(r.required_level for r in scoped_reqs) or 1
     skill_gap_global = _pct(sum(gap_rows), total_required) if gap_rows else 0.0
 
+    # Catégories réellement présentes en base (référentiel Skill.category du seed) :
+    # 'Techniques Métier', 'Management', 'Communication', 'Transversales', 'Outils & Technologies'.
     by_category = {
         row['skill__category']: row['avg']
         for row in skills.values('skill__category').annotate(avg=Avg('level')).exclude(skill__category='')
     }
-    technical = by_category.get('Technique', by_category.get('technical', avg_skill_level))
-    business = by_category.get('Métier', by_category.get('business', avg_skill_level))
-    behavioral = by_category.get('Comportemental', by_category.get('behavioral', avg_skill_level))
-    digital = by_category.get('Numérique', by_category.get('digital', avg_skill_level))
+
+    def cat_avg(*names):
+        vals = [float(by_category[n]) for n in names if n in by_category]
+        return _avg(vals) if vals else float(avg_skill_level)
+
+    technical = cat_avg('Outils & Technologies', 'Technique', 'technical')
+    business = cat_avg('Techniques Métier', 'Métier', 'business')
+    behavioral = cat_avg('Management', 'Communication', 'Transversales', 'Comportemental', 'behavioral')
+    digital = cat_avg('Outils & Technologies', 'Numérique', 'digital')
 
     distinct_roles_covered = scoped_reqs.filter(
         skill_id__in=skills.filter(level__gt=0).values_list('skill_id', flat=True)
@@ -287,10 +294,12 @@ def compute_employee_kpis(user_ids):
 
     from apps.ai_engine.models import CourseRecommendation
     recommended = CourseRecommendation.objects.filter(user_id__in=user_ids)
-    recommended_courses = set(recommended.values_list('course_id', flat=True))
-    recommended_done = Enrollment.objects.filter(
-        user_id__in=user_ids, course_id__in=recommended_courses, status=Enrollment.STATUS_COMPLETED
-    ).count()
+    recommended_pairs = set(recommended.values_list('user_id', 'course_id'))
+    completed_pairs = set(
+        Enrollment.objects.filter(user_id__in=user_ids, status=Enrollment.STATUS_COMPLETED)
+        .values_list('user_id', 'course_id')
+    )
+    recommended_completed_count = len(recommended_pairs & completed_pairs)
 
     promotion_score = _avg([avg_score, avg_skill_level / 5 * 100, _pct(achieved_obj, total_obj)])
     mobility_readiness = _pct(distinct_roles_covered, total_roles)
@@ -302,7 +311,7 @@ def compute_employee_kpis(user_ids):
         'official_certifications': round(certified_skills / n, 2),
         'training_hours_done': round(training_hours, 2),
         'training_hours_left': round(max(0, target_hours - training_hours), 2),
-        'recommended_trainings_done': _pct(recommended_done, len(recommended_courses)) if recommended_courses else 0,
+        'recommended_trainings_done': _pct(recommended_completed_count, len(recommended_pairs)),
         'mandatory_trainings_done': _pct(mandatory_done, mandatory.count()),
         'promotion_eligibility': promotion_score,
         'mobility_readiness': min(100, mobility_readiness),
@@ -350,36 +359,39 @@ def compute_employee_kpis(user_ids):
         'training_roi': company_budget_roi if company_budget_roi is not None else 0,
     })
 
-    # ── G. Soft Skills (dérivées des évaluations 360°) ──────────────────────
-    eval_dims = Evaluation360Response.objects.filter(
-        campaign__target_user_id__in=user_ids, answers__has_key='dimensions'
-    ).values_list('answers', flat=True)
+    # ── G. Soft Skills (dérivées des réponses d'évaluation 360°) ─────────────
+    # Les campagnes 360° stockent des scores 0-100 par dimension directement dans
+    # `answers` (ex: {'initiative': 57.9, 'cooperation': 44.0, 'adaptabilite': 47.6,
+    # 'communication': 42.9, 'respect_delais': 50.5, 'qualite_travail': ..., 'competences_metier': ...,
+    # 'orientation_client': ...}) — pas de sous-clé 'dimensions', et déjà à l'échelle 0-100.
+    eval_answers = list(Evaluation360Response.objects.filter(
+        campaign__target_user_id__in=user_ids
+    ).exclude(answers={}).values_list('answers', flat=True))
     dim_totals = {}
-    for answers in eval_dims:
-        dims = (answers or {}).get('dimensions', {})
-        for k, v in dims.items():
+    for answers in eval_answers:
+        for k, v in (answers or {}).items():
             try:
                 dim_totals.setdefault(k, []).append(float(v))
             except (TypeError, ValueError):
                 continue
 
-    def dim_pct(*keys):
+    def real_avg(*keys):
         vals = []
         for k in keys:
             vals.extend(dim_totals.get(k, []))
-        return round(_avg(vals) / 5 * 100, 2) if vals else 0.0
+        return round(_avg(vals), 2) if vals else 0.0
 
     values.update({
-        'leadership': dim_pct('leadership'),
-        'communication': dim_pct('communication'),
-        'teamwork': dim_pct('teamwork'),
-        'adaptability': dim_pct('autonomy'),
-        'time_management': values.get('deadline_respect_rate', 0),
-        'stress_management': dim_pct('autonomy', 'problem_solving'),
-        'creativity': dim_pct('innovation'),
-        'initiative': dim_pct('autonomy', 'initiative'),
-        'decision_making': dim_pct('problem_solving'),
-        'emotional_intelligence': dim_pct('communication', 'teamwork'),
+        'leadership': real_avg('competences_metier') or global_perf,
+        'communication': real_avg('communication'),
+        'teamwork': real_avg('cooperation'),
+        'adaptability': real_avg('adaptabilite'),
+        'time_management': real_avg('respect_delais') or values.get('deadline_respect_rate', 0),
+        'stress_management': real_avg('adaptabilite', 'respect_delais'),
+        'creativity': real_avg('qualite_travail'),
+        'initiative': real_avg('initiative'),
+        'decision_making': real_avg('orientation_client', 'competences_metier'),
+        'emotional_intelligence': real_avg('cooperation', 'communication'),
     })
 
     # ── H. Évaluation 360° ────────────────────────────────────────────────────
@@ -408,7 +420,7 @@ def compute_employee_kpis(user_ids):
         'eval_internal_clients': None,
         'eval_trainers': eval_final,
         'eval_progress': eval_progress,
-        'leadership_potential': dim_pct('leadership', 'autonomy') or global_360,
+        'leadership_potential': real_avg('competences_metier', 'initiative') or global_360,
         'succession_index': round(_avg([global_360, values['versatility_index'] * 20]), 2),
         'global_360_score': global_360,
     })

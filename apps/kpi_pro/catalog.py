@@ -233,6 +233,34 @@ TRAINER_CATEGORIES = [
     },
 ]
 
+# Sous-ensemble des 50 KPI Formateurs directement perceptibles par un apprenant
+# (les autres — formations publiées, quiz créés, usage IA, respect des délais
+# contractuels… — sont objectifs et déjà calculés depuis les données réelles de
+# cours/sessions ; on ne demande pas à un apprenant de "noter" un nombre de quiz créés).
+RATABLE_TRAINER_KPIS = [
+    ('content_quality', "Qualité des supports pédagogiques"),
+    ('course_structuring', "Structuration du cours"),
+    ('objectives_respect', "Le cours a respecté ses objectifs annoncés"),
+    ('resource_diversity', "Diversité et pertinence des ressources"),
+    ('clarity', "Clarté des explications"),
+    ('subject_mastery', "Maîtrise du sujet"),
+    ('communication_quality', "Qualité de la communication"),
+    ('audience_engagement', "Capacité à capter l'attention"),
+    ('time_management', "Gestion du temps (respect du planning)"),
+    ('dynamism', "Dynamisme et énergie"),
+    ('interactivity', "Interactivité avec les apprenants"),
+    ('practical_demo_quality', "Qualité des démonstrations pratiques"),
+    ('level_adaptation', "Adaptation à votre niveau"),
+    ('avg_satisfaction', "Satisfaction générale"),
+    ('perceived_availability', "Disponibilité perçue"),
+    ('answer_quality', "Qualité des réponses apportées"),
+    ('personalized_support', "Accompagnement personnalisé"),
+    ('global_satisfaction', "Satisfaction globale"),
+    ('eval_difficulty_balance', "Niveau de difficulté des évaluations approprié"),
+    ('theory_practice_ratio', "Bon équilibre théorie / pratique"),
+    ('pedagogical_innovation', "Méthodes pédagogiques innovantes"),
+]
+
 TPI_WEIGHTS = [
     ('avg_satisfaction', "Satisfaction des apprenants", 0.25),
     ('learner_success_rate', "Réussite des apprenants", 0.20),
