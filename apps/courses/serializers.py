@@ -131,6 +131,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 
 class LessonReviewSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
 
     class Meta:
         model = LessonReview
@@ -154,6 +155,10 @@ class CourseListSerializer(serializers.ModelSerializer):
 class CourseDetailSerializer(serializers.ModelSerializer):
     sections = CourseSectionSerializer(many=True, read_only=True)
     reviews = ReviewSerializer(many=True, read_only=True)
+    # Learners rate/comment per lesson (LessonReview), not the course as a whole
+    # (Review) — the course page only ever showed the latter, so per-lesson feedback
+    # never surfaced here even though that's the review flow actually in use.
+    lesson_reviews = serializers.SerializerMethodField()
     instructor_name = serializers.CharField(source='instructor.get_full_name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
 
@@ -161,6 +166,12 @@ class CourseDetailSerializer(serializers.ModelSerializer):
         model = Course
         fields = '__all__'
         read_only_fields = ('slug', 'average_rating', 'total_students')
+
+    def get_lesson_reviews(self, obj):
+        qs = LessonReview.objects.filter(
+            lesson__chapter__section__course=obj
+        ).select_related('user', 'lesson').order_by('-created_at')
+        return LessonReviewSerializer(qs, many=True).data
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
