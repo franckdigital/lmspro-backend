@@ -212,7 +212,7 @@ MIN_ELAPSED_SLACK_SECONDS = 15   # floor so back-to-back calls (e.g. timeupdate 
 
 def record_lesson_progress(
     user, lesson, watched_seconds=None, position_seconds=None, document_viewed=None, time_spent_delta=0,
-    scorm_completed=None,
+    scorm_completed=None, duration_seconds=None,
 ):
     from apps.courses.models import Lesson
 
@@ -221,6 +221,13 @@ def record_lesson_progress(
 
     if created:
         record_xapi_statement(user, 'experienced', 'lesson', lesson.id, object_name=lesson.title)
+
+    # Backfill a lesson's duration from what the player actually reports — authors
+    # frequently leave "Durée (secondes)" at 0, which otherwise blocks watch_percent
+    # from ever being computed below and silently prevents the lesson from completing.
+    if duration_seconds and not lesson.duration_seconds:
+        lesson.duration_seconds = duration_seconds
+        lesson.save(update_fields=['duration_seconds'])
 
     if watched_seconds is not None:
         # §26 anti-skip: a client can't inflate "furthest position reached" faster than

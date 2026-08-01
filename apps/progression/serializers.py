@@ -23,6 +23,10 @@ class LessonProgressUpdateSerializer(serializers.Serializer):
     document_viewed = serializers.BooleanField(required=False)
     time_spent_delta = serializers.IntegerField(required=False, min_value=0, default=0)
     mark_completed = serializers.BooleanField(required=False)
+    # Real media duration reported by the player — backfills Lesson.duration_seconds
+    # when it was left at 0 (never filled in by whoever authored the lesson), which
+    # otherwise silently blocks watch-percent completion forever.
+    duration_seconds = serializers.IntegerField(required=False, min_value=0)
 
 
 class LessonEventSerializer(serializers.Serializer):
