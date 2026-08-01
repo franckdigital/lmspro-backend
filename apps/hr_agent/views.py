@@ -37,7 +37,26 @@ class AgentResourceViewSet(CompanyScopedViewSetMixin, viewsets.ModelViewSet):
     filterset_fields = ['category', 'content_type', 'department', 'service', 'is_active']
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.user.company, created_by=self.request.user)
+        # A super admin authors content while "viewing" a specific company (top-nav
+        # switcher) — request.user.company is *their own* account's company, which is
+        # usually a different one, so forcing it here silently created every resource
+        # under the wrong tenant and it never showed up for that company's employees.
+        user = self.request.user
+        company = user.company
+        if user.is_superuser or user.role == Roles.SUPER_ADMIN:
+            requested_company = serializer.validated_data.get('company')
+            if requested_company:
+                company = requested_company
+        serializer.save(company=company, created_by=user)
+
+    def perform_update(self, serializer):
+        # Same reasoning as perform_create — only a super admin may repoint a
+        # resource at a different company; everyone else keeps it where it is.
+        user = self.request.user
+        if user.is_superuser or user.role == Roles.SUPER_ADMIN:
+            serializer.save()
+        else:
+            serializer.save(company=serializer.instance.company)
 
 
 class AgentChatView(APIView):
