@@ -41,3 +41,35 @@ def generate_presigned_upload(*, filename, content_type, folder):
         ExpiresIn=900,
     )
     return {'upload_url': upload_url, 'key': key, 'content_type': content_type}
+
+
+def is_r2_backed(file_field):
+    """True when this FieldFile lives on R2 rather than local disk (scorm_package and
+    LessonResource.file were deliberately left on local storage — see the R2 migration)."""
+    if not file_field or not settings.USE_R2_STORAGE:
+        return False
+    from storages.backends.s3 import S3Storage
+
+    return isinstance(file_field.storage, S3Storage)
+
+
+def generate_presigned_download(key, *, download_filename=None, expires_in=3600):
+    """Presigned GET straight to R2 — used to redirect playback/download requests
+    instead of Django buffering the whole object into memory first (django-storages'
+    S3 file wrapper downloads the entire object on open(), which made every seek in a
+    500MB video re-fetch the whole file through the VPS before serving a byte range)."""
+    import boto3
+    from botocore.client import Config as BotoConfig
+
+    client = boto3.client(
+        's3',
+        endpoint_url=settings.AWS_S3_ENDPOINT_URL,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME,
+        config=BotoConfig(signature_version=settings.AWS_S3_SIGNATURE_VERSION),
+    )
+    params = {'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': key}
+    if download_filename:
+        params['ResponseContentDisposition'] = f'attachment; filename="{download_filename}"'
+    return client.generate_presigned_url('get_object', Params=params, ExpiresIn=expires_in)

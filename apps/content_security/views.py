@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from rest_framework import permissions, viewsets
 from rest_framework.response import Response
@@ -99,6 +99,8 @@ class SecureMediaFileView(APIView):
             object_type='lesson', object_id=str(lesson.id),
         )
 
+        from apps.core.storage import generate_presigned_download, is_r2_backed
+
         wants_download = request.query_params.get('download') == '1'
         if wants_download and can_download_lesson(lesson, user):
             if lesson.content_type == Lesson.TYPE_PDF:
@@ -107,8 +109,18 @@ class SecureMediaFileView(APIView):
             if lesson.content_type == Lesson.TYPE_IMAGE:
                 buffer = watermark_image(file_field.open('rb'), user)
                 return FileResponse(buffer, as_attachment=True, filename=f'{lesson.title}.jpg')
-            return FileResponse(file_field.open('rb'), as_attachment=True, filename=file_field.name.split('/')[-1])
+            filename = file_field.name.split('/')[-1]
+            if is_r2_backed(file_field):
+                return HttpResponseRedirect(generate_presigned_download(file_field.name, download_filename=filename))
+            return FileResponse(file_field.open('rb'), as_attachment=True, filename=filename)
 
+        # Video/audio/documents on R2: redirect straight to a short-lived signed R2 URL
+        # instead of streaming the bytes through Django — django-storages' S3 file
+        # wrapper buffers the *entire* object on open(), so without this every seek in
+        # a large video re-downloaded the whole file through the VPS just to serve one
+        # byte range. R2 handles Range requests natively and much faster.
+        if is_r2_backed(file_field):
+            return HttpResponseRedirect(generate_presigned_download(file_field.name))
         return FileResponse(file_field.open('rb'))
 
 
