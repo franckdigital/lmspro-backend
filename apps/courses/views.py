@@ -350,6 +350,13 @@ class LessonReviewViewSet(viewsets.ModelViewSet):
     filterset_fields = ['lesson', 'user']
 
     def perform_create(self, serializer):
+        # (user, lesson) is unique — a stale "does a review already exist?" check on the
+        # client (e.g. that GET failing/racing) can otherwise send a second create and
+        # crash with an unhandled IntegrityError (500) instead of just updating it.
+        lesson = serializer.validated_data.get('lesson')
+        existing = LessonReview.objects.filter(user=self.request.user, lesson=lesson).first()
+        if existing:
+            serializer.instance = existing
         serializer.save(user=self.request.user)
 
 
